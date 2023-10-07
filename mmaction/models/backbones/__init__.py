@@ -24,6 +24,16 @@ from .uniformer import UniFormer
 from .uniformerv2 import UniFormerV2
 from .vit_mae import VisionTransformer
 from .x3d import X3D
+from .vit_clip import ViT_CLIP
+# from .swin_2d_tps import SwinTransformer2D_TPS
+from .vit_clip_tps import ViT_CLIP_TPS
+from .vit_clip_utuner import ViT_CLIP_UTUNER
+# from .vit_clip_dualpath import ViT_CLIP_DUALPATH
+from .vit_clip_ats import ViT_CLIP_ATS
+from .vit_clip_ats_topk import ViT_CLIP_ATS_TOPK
+from .vit_clip_tome import ViT_CLIP_TOME
+from .vit_clip_zeroI2V import ViT_CLIP_ZEROI2V
+from .vit_clip_vpt import ViT_CLIP_VPT
 
 __all__ = [
     'AAGCN', 'C2D', 'C3D', 'MViT', 'MobileNetV2', 'MobileNetV2TSM',
@@ -31,5 +41,6 @@ __all__ = [
     'ResNet3dLayer', 'ResNet3dSlowFast', 'ResNet3dSlowOnly', 'ResNetAudio',
     'ResNetTIN', 'ResNetTSM', 'STGCN', 'SwinTransformer3D', 'TANet',
     'TimeSformer', 'UniFormer', 'UniFormerV2', 'VisionTransformer', 'X3D',
-    'RGBPoseConv3D'
+    'RGBPoseConv3D','ViT_CLIP','ViT_CLIP_TPS','ViT_CLIP_UTUNER',
+    'ViT_CLIP_ATS','ViT_CLIP_TOME','ViT_CLIP_ATS_TOPK','ViT_CLIP_ZEROI2V','ViT_CLIP_VPT'
 ]
