@@ -42,3 +42,10 @@ __all__ = [
     'RGBPoseConv3D','ViT_CLIP','ViT_CLIP_TPS','ViT_CLIP_UTUNER',
     'ViT_CLIP_ATS','ViT_CLIP_TOME','ViT_CLIP_ATS_TOPK'
 ]
+
+try:
+    from .mobileone_tsm import MobileOneTSM  # noqa: F401
+    __all__.append('MobileOneTSM')
+
+except (ImportError, ModuleNotFoundError):
+    pass
