@@ -13,7 +13,11 @@ data_root = 'data/hmdb51/videos'
 data_root_val = 'data/hmdb51/videos'
 ann_file_train = 'data/hmdb51/hmdb51_train_split_1_videos.txt'
 ann_file_val = 'data/hmdb51/hmdb51_val_split_1_videos.txt'
+<<<<<<< HEAD
 ann_file_test = 'data/hmdb51/hmdb51_val_split_1_videos.txt'
+=======
+ann_file_test = 'data/hmdb51/hmdb51_val_split_2_videos.txt'
+>>>>>>> 3189cb338d76331c77ebb96f78980b8d2bf557f8
 
 total_epochs = 30
 num_frames=32
@@ -103,6 +107,10 @@ optim_wrapper = dict(
         ln_2=dict(decay_mult=0.),
         ln_pre=dict(decay_mult=0.),
         ln_post=dict(decay_mult=0.),
+<<<<<<< HEAD
+=======
+        
+>>>>>>> 3189cb338d76331c77ebb96f78980b8d2bf557f8
         ),
     
     )
@@ -135,7 +143,11 @@ custom_hooks = [dict(type='EarlyStoppingHook',
                     monitor='acc/top1',
                     rule='greater',
                     min_delta=0.01,
+<<<<<<< HEAD
                     patience=8)]
+=======
+                    patience=5)]
+>>>>>>> 3189cb338d76331c77ebb96f78980b8d2bf557f8
 
 
 visualizer = dict(
@@ -143,7 +155,11 @@ visualizer = dict(
     vis_backends=[
         dict(type='LocalVisBackend'),
         dict(type='TensorboardVisBackend', save_dir=f'{work_dir}/tensorboard'),
+<<<<<<< HEAD
         dict(type='WandbVisBackend',init_kwargs=dict(project='vitclip_tps_hmdb51', name='exp_parallel_Tada_all_apex')),
+=======
+        dict(type='WandbVisBackend',init_kwargs=dict(project='vitclip_tps_hmdb51', name='exp_apex')),
+>>>>>>> 3189cb338d76331c77ebb96f78980b8d2bf557f8
     ],
 )
 

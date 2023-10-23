@@ -17,7 +17,11 @@ model = dict(
         heads=12,
         drop_path_rate=0.1,
         adapter_scale=0.5,
+<<<<<<< HEAD
         tome_r=(4,0)),
+=======
+        tome_r=(8,0)),
+>>>>>>> 3189cb338d76331c77ebb96f78980b8d2bf557f8
     data_preprocessor=dict(
         type='ActionDataPreprocessor',
         mean=[122.769, 116.74, 104.04],
@@ -121,7 +125,11 @@ test_cfg = dict(type='TestLoop')
 
 # optimizer
 optim_wrapper = dict(
+<<<<<<< HEAD
     type='ApexOptimWrapper',
+=======
+    type='AmpOptimWrapper',
+>>>>>>> 3189cb338d76331c77ebb96f78980b8d2bf557f8
     optimizer=dict(
         type='AdamW', lr=3e-4, betas=(0.9, 0.999), weight_decay=0.05),
     paramwise_cfg=dict(
@@ -162,8 +170,13 @@ default_hooks = dict(
 custom_hooks = [dict(type='EarlyStoppingHook',
                     monitor='acc/top1',
                     rule='greater',
+<<<<<<< HEAD
                     min_delta=0.005,
                     patience=7)]
+=======
+                    min_delta=0.01,
+                    patience=8)]
+>>>>>>> 3189cb338d76331c77ebb96f78980b8d2bf557f8
 
 
 visualizer = dict(
@@ -171,7 +184,11 @@ visualizer = dict(
     vis_backends=[
         dict(type='LocalVisBackend'),
         dict(type='TensorboardVisBackend', save_dir=f'{work_dir}/tensorboard'),
+<<<<<<< HEAD
         dict(type='WandbVisBackend',init_kwargs=dict(project='vitclip_tome_base_hmdb51', name='exp_4r0_tps_all_apex')),
+=======
+        dict(type='WandbVisBackend',init_kwargs=dict(project='vitclip_tome_base_hmdb51', name='exp2_8r0_tps_all')),
+>>>>>>> 3189cb338d76331c77ebb96f78980b8d2bf557f8
     ],
 )
 

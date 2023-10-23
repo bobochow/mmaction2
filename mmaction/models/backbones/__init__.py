@@ -32,8 +32,11 @@ from .vit_clip_utuner import ViT_CLIP_UTUNER
 from .vit_clip_ats import ViT_CLIP_ATS
 from .vit_clip_ats_topk import ViT_CLIP_ATS_TOPK
 from .vit_clip_tome import ViT_CLIP_TOME
+<<<<<<< HEAD
 from .vit_clip_zeroI2V import ViT_CLIP_ZEROI2V
 from .vit_clip_vpt import ViT_CLIP_VPT
+=======
+>>>>>>> 3189cb338d76331c77ebb96f78980b8d2bf557f8
 
 __all__ = [
     'AAGCN', 'C2D', 'C3D', 'MViT', 'MobileNetV2', 'MobileNetV2TSM',
@@ -42,5 +45,16 @@ __all__ = [
     'ResNetTIN', 'ResNetTSM', 'STGCN', 'SwinTransformer3D', 'TANet',
     'TimeSformer', 'UniFormer', 'UniFormerV2', 'VisionTransformer', 'X3D',
     'RGBPoseConv3D','ViT_CLIP','ViT_CLIP_TPS','ViT_CLIP_UTUNER',
+<<<<<<< HEAD
     'ViT_CLIP_ATS','ViT_CLIP_TOME','ViT_CLIP_ATS_TOPK','ViT_CLIP_ZEROI2V','ViT_CLIP_VPT'
+=======
+    'ViT_CLIP_ATS','ViT_CLIP_TOME','ViT_CLIP_ATS_TOPK'
+>>>>>>> 3189cb338d76331c77ebb96f78980b8d2bf557f8
 ]
+
+try:
+    from .mobileone_tsm import MobileOneTSM  # noqa: F401
+    __all__.append('MobileOneTSM')
+
+except (ImportError, ModuleNotFoundError):
+    pass

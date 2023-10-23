@@ -1,5 +1,9 @@
 from collections import OrderedDict
+<<<<<<< HEAD
 from typing import Dict, List, Optional, Sequence, Tuple, Union
+=======
+from typing import Tuple, Union
+>>>>>>> 3189cb338d76331c77ebb96f78980b8d2bf557f8
 from timm.models.layers import DropPath, to_2tuple, trunc_normal_
 import numpy as np
 import torch
@@ -17,6 +21,7 @@ from mmaction.registry import MODELS
 
 logger = MMLogger.get_current_instance()
 
+<<<<<<< HEAD
 def init_generator(device: torch.device, fallback: torch.Generator=None):
     """
     Forks the current default random generator given device.
@@ -32,6 +37,8 @@ def init_generator(device: torch.device, fallback: torch.Generator=None):
             return fallback
 
 
+=======
+>>>>>>> 3189cb338d76331c77ebb96f78980b8d2bf557f8
 class Adapter(nn.Module):
     def __init__(self, D_features, mlp_ratio=0.25, act_layer=nn.GELU, skip_connect=True):
         super().__init__()
@@ -70,6 +77,7 @@ class QuickGELU(nn.Module):
 class ResidualAttentionBlock(nn.Module):
     def __init__(self, d_model: int, n_head: int, attn_mask: torch.Tensor = None,
                 scale=1., num_tadapter=1, num_frames=8, drop_path=0.,
+<<<<<<< HEAD
 
                 shift: bool = False, 
                 shift_type: str = 'psm',
@@ -77,6 +85,10 @@ class ResidualAttentionBlock(nn.Module):
                 rel_pos_zero_init: bool = False,
                 input_size: Optional[Tuple[int]] = None,
                 ):
+=======
+                shift: bool = False, 
+                shift_type: str = 'psm'):
+>>>>>>> 3189cb338d76331c77ebb96f78980b8d2bf557f8
         super().__init__()
         self.num_tadapter = num_tadapter
         self.attn = nn.MultiheadAttention(d_model, n_head)
@@ -89,14 +101,19 @@ class ResidualAttentionBlock(nn.Module):
         self.ln_2 = LayerNorm(d_model)
         self.attn_mask = attn_mask
         self.n_head = n_head
+<<<<<<< HEAD
 
 
+=======
+        
+>>>>>>> 3189cb338d76331c77ebb96f78980b8d2bf557f8
         self.d_model=d_model
         self.shift = shift
         self.shift_type = shift_type
 
         self.MLP_Adapter = Adapter(d_model, skip_connect=False)
         self.S_Adapter = Adapter(d_model)
+<<<<<<< HEAD
         # self.S_Adapter_cross = Adapter(d_model)
 
         self.scale = scale
@@ -149,6 +166,28 @@ class ResidualAttentionBlock(nn.Module):
             # trunc_normal_(self.rel_pos_w, std=0.02)
             trunc_normal_(self.rel_pos_t, std=0.02)
             # trunc_normal_(self.relative_position_bias_table, std=.02)
+=======
+        self.scale = scale
+        self.T_Adapter = Adapter(d_model, skip_connect=False)
+        if num_tadapter == 2:
+            self.T_Adapter_in = Adapter(d_model)
+        self.num_frames = num_frames
+        self.drop_path = DropPath(drop_path) if drop_path > 0. else nn.Identity()
+        
+        if self.shift:
+            self.shift_op=PatchShift( inv=False)
+            
+            # if self.shift_type == 'psm':
+            #     # self.shift_op = PatchShift(self.n_head, False, 1)
+            #     # self.shift_op_back = PatchShift(self.n_head, True, 1)
+            #     self.shift_op = PatchShift(False)
+            #     self.shift_op_back = PatchShift(True)
+                
+            # elif self.shift_type == 'tsm':
+            #     self.shift_op = TemporalShift(8)
+            
+
+>>>>>>> 3189cb338d76331c77ebb96f78980b8d2bf557f8
 
     # def attention(self, x: torch.Tensor):
     #     self.attn_mask = self.attn_mask.to(dtype=x.dtype, device=x.device) if self.attn_mask is not None else None
@@ -159,6 +198,7 @@ class ResidualAttentionBlock(nn.Module):
     #     return self.attn(q, k, v, need_weights=False, attn_mask=self.attn_mask)[0]
 
     def attention(
+<<<<<<< HEAD
         self, x: torch.Tensor ,t_cls=False
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         
@@ -170,6 +210,18 @@ class ResidualAttentionBlock(nn.Module):
         k = (x @ self.attn.in_proj_weight[self.d_model:-self.d_model].T
              ) + self.attn.in_proj_bias[self.d_model:-self.d_model]
         v = (x @ self.attn.in_proj_weight[-self.d_model:].T
+=======
+        self, x: torch.Tensor , y: torch.Tensor
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        
+        # input: HW+2, BT, D
+        q = (x @ self.attn.in_proj_weight[:self.d_model].T
+             ) + self.attn.in_proj_bias[:self.d_model]
+
+        k = (y @ self.attn.in_proj_weight[self.d_model:-self.d_model].T
+             ) + self.attn.in_proj_bias[self.d_model:-self.d_model]
+        v = (y @ self.attn.in_proj_weight[-self.d_model:].T
+>>>>>>> 3189cb338d76331c77ebb96f78980b8d2bf557f8
              ) + self.attn.in_proj_bias[-self.d_model:]
         Tx, Ty, N = q.size(0), k.size(0), q.size(1)
         q = q.view(Tx, N, self.attn.num_heads,
@@ -181,6 +233,7 @@ class ResidualAttentionBlock(nn.Module):
         
         aff = (q @ k.transpose(-2, -1) / (self.attn.head_dim**0.5)) # (N, num_heads, Tx, Ty)
         
+<<<<<<< HEAD
         # if self.rel_pos_embed and not t_cls:
         #     B = N // self.num_frames
         #     L=Tx-2
@@ -196,6 +249,8 @@ class ResidualAttentionBlock(nn.Module):
             rel_t = torch.einsum('bytc,tkc->bytk', q, relative_position_bias)
             aff += rel_t
         
+=======
+>>>>>>> 3189cb338d76331c77ebb96f78980b8d2bf557f8
         aff = aff.softmax(dim=-1)
         
         
@@ -205,6 +260,7 @@ class ResidualAttentionBlock(nn.Module):
         
         return out 
     
+<<<<<<< HEAD
     def shift_attention(
         self, x: torch.Tensor ,y: torch.Tensor
     ) -> Tuple[torch.Tensor, torch.Tensor]:
@@ -252,6 +308,8 @@ class ResidualAttentionBlock(nn.Module):
         
         return out 
 
+=======
+>>>>>>> 3189cb338d76331c77ebb96f78980b8d2bf557f8
     def forward(self, x: torch.Tensor):
         ## x shape [HW+1, BT, D]
         n, bt, d = x.shape
@@ -263,7 +321,11 @@ class ResidualAttentionBlock(nn.Module):
         if self.num_tadapter == 2:
             xt = self.T_Adapter(self.attention(self.T_Adapter_in(self.ln_1(xt))))
         else:
+<<<<<<< HEAD
             xt = self.T_Adapter(self.attention(self.ln_1(xt),t_cls=True))
+=======
+            xt = self.T_Adapter(self.attention(self.ln_1(xt),self.ln_1(xt)))
+>>>>>>> 3189cb338d76331c77ebb96f78980b8d2bf557f8
         xt = rearrange(xt, 't (b n) d -> n (b t) d', n=1)
         
         x= torch.cat([x[:1,:,:], xt, x[1:,:,:]], dim=0)
@@ -271,6 +333,11 @@ class ResidualAttentionBlock(nn.Module):
         ## prompt tuning
         if self.shift:
             
+<<<<<<< HEAD
+=======
+            # x = x + self.S_Adapter(self.attention(self.ln_1(x)))
+            
+>>>>>>> 3189cb338d76331c77ebb96f78980b8d2bf557f8
             xln=self.ln_1(x)
             
             tmp_x=xln[2:, :, :].clone()
@@ -285,6 +352,7 @@ class ResidualAttentionBlock(nn.Module):
             tmp_x = rearrange(tmp_x, 'b t h w c -> (b t) c h w')
             
             tmp_x = tmp_x.view(NT, C, -1).permute(2, 0, 1).contiguous() # P NT C
+<<<<<<< HEAD
             
             if self.shift_type=='psm':
                 tmp_x = torch.cat([xln, tmp_x], dim=0)
@@ -309,16 +377,35 @@ class ResidualAttentionBlock(nn.Module):
             xn = self.ln_2(x)
             x = x + self.mlp(xn) + self.drop_path(self.scale * self.MLP_Adapter(xn))
         
+=======
+            tmp_x = torch.cat([xln, tmp_x], dim=0)
+            
+            # x = x + self.S_Adapter(self.cross_attention(xln,tmp_x,tmp_x))
+            x = x + self.S_Adapter(self.attention(xln,tmp_x))
+        else:
+            ## spatial adaptation
+            x = x + self.S_Adapter(self.attention(self.ln_1(x),self.ln_1(x)))
+        
+        # joint adaptation
+        # x=x[:-1,:,:]
+        x= torch.cat([x[:1,:,:], x[2:,:,:]], dim=0) # [HW+2, BT, D]
+        xn = self.ln_2(x)
+        x = x + self.mlp(xn) + self.drop_path(self.scale * self.MLP_Adapter(xn))
+>>>>>>> 3189cb338d76331c77ebb96f78980b8d2bf557f8
         return x
 
 
 class Transformer(nn.Module):
     def __init__(self, num_frames, width: int, layers: int, heads: int, attn_mask: torch.Tensor = None, 
+<<<<<<< HEAD
                 num_tadapter=1, scale=1., drop_path=0.1,
                 t_rel_pos_embed: bool = True,
                 rel_pos_zero_init: bool = True,
                 input_size: Optional[Tuple[int]] = (8,14,14),
                 ):
+=======
+                num_tadapter=1, scale=1., drop_path=0.1):
+>>>>>>> 3189cb338d76331c77ebb96f78980b8d2bf557f8
         super().__init__()
         self.width = width
         self.layers = layers
@@ -336,11 +423,16 @@ class Transformer(nn.Module):
                     num_tadapter,
                     num_frames,
                     dpr[i],
+<<<<<<< HEAD
                     shift= True,
                     shift_type='psm',
                     t_rel_pos_embed = t_rel_pos_embed,
                     rel_pos_zero_init = rel_pos_zero_init,
                     input_size = input_size,
+=======
+                    shift=True,
+                    shift_type='psm',
+>>>>>>> 3189cb338d76331c77ebb96f78980b8d2bf557f8
                 )
                 for i in range(layers)
             ]
@@ -353,6 +445,7 @@ class Transformer(nn.Module):
 @MODELS.register_module()
 class ViT_CLIP_UTUNER(nn.Module):
     ## ViT definition in CLIP image encoder
+<<<<<<< HEAD
     def __init__(self, input_resolution: int, num_frames: int, patch_size: int, width: int, layers: int, heads: int, drop_path_rate,
                 num_tadapter=1,
                 adapter_scale=0.5, 
@@ -363,6 +456,9 @@ class ViT_CLIP_UTUNER(nn.Module):
                 rel_pos_zero_init: bool = False,
                 
                 ):
+=======
+    def __init__(self, input_resolution: int, num_frames: int, patch_size: int, width: int, layers: int, heads: int, drop_path_rate, num_tadapter=1, adapter_scale=0.5, pretrained=None ):
+>>>>>>> 3189cb338d76331c77ebb96f78980b8d2bf557f8
         super().__init__()
         self.input_resolution = input_resolution
         self.pretrained = pretrained
@@ -371,6 +467,7 @@ class ViT_CLIP_UTUNER(nn.Module):
         scale = width ** -0.5
         self.layers = layers
         self.class_embedding = nn.Parameter(scale * torch.randn(width))
+<<<<<<< HEAD
         
         self.use_abs_pos_embed = use_abs_pos_embed
         if self.use_abs_pos_embed:
@@ -391,6 +488,15 @@ class ViT_CLIP_UTUNER(nn.Module):
                                             rel_pos_zero_init = rel_pos_zero_init,
                                             input_size = self.input_size,
                                             )
+=======
+        self.positional_embedding = nn.Parameter(scale * torch.randn((input_resolution // patch_size) ** 2 + 1, width))
+        self.ln_pre = LayerNorm(width)
+
+        self.num_frames = num_frames
+        self.temporal_embedding = nn.Parameter(torch.zeros(1, num_frames, width))
+
+        self.transformer = Transformer(num_frames, width, layers, heads, num_tadapter=num_tadapter, scale=adapter_scale, drop_path=drop_path_rate)
+>>>>>>> 3189cb338d76331c77ebb96f78980b8d2bf557f8
 
         self.ln_post = LayerNorm(width)
         
@@ -438,7 +544,11 @@ class ViT_CLIP_UTUNER(nn.Module):
                         if isinstance(m2, nn.Linear):
                             nn.init.constant_(m2.weight, 0)
                             nn.init.constant_(m2.bias, 0)
+<<<<<<< HEAD
         
+=======
+
+>>>>>>> 3189cb338d76331c77ebb96f78980b8d2bf557f8
         ## initialize T_Adapter
         for n, m in self.transformer.named_modules():
             if 'T_Adapter' in n:
@@ -458,6 +568,7 @@ class ViT_CLIP_UTUNER(nn.Module):
                             nn.init.constant_(m2.bias, 0)
 
         
+<<<<<<< HEAD
         ## freeze some parameters
         for name, param in self.named_parameters():
             if 'temporal_embedding' not in name and 'ln_post' not in name and 'cls_head' not in name and 'Adapter' not in name and 'rel_pos_t' not in name :
@@ -471,6 +582,9 @@ class ViT_CLIP_UTUNER(nn.Module):
         logger.info(
             f'Number of total parameters: {(num_total_param/1.e6):6.2f}, tunable parameters: {(num_param/1.e6):6.2f}'
         )
+=======
+        self._freeze_stages()
+>>>>>>> 3189cb338d76331c77ebb96f78980b8d2bf557f8
 
     @torch.jit.ignore
     def no_weight_decay(self):
@@ -487,6 +601,7 @@ class ViT_CLIP_UTUNER(nn.Module):
         x = x.reshape(x.shape[0], x.shape[1], -1) # bt d n
         x = x.permute(0, 2, 1)  # bt n d
         x = torch.cat([self.class_embedding.to(x.dtype) + torch.zeros(x.shape[0], 1, x.shape[-1], dtype=x.dtype, device=x.device), x], dim=1)
+<<<<<<< HEAD
         
         if self.use_abs_pos_embed:
             x = x + self.positional_embedding.to(x.dtype)
@@ -496,6 +611,14 @@ class ViT_CLIP_UTUNER(nn.Module):
             x = rearrange(x, '(b t) n d -> (b n) t d', t=self.num_frames)
             x = x + self.temporal_embedding
             x = rearrange(x, '(b n) t d -> (b t) n d', n=n)
+=======
+        x = x + self.positional_embedding.to(x.dtype)
+
+        n = x.shape[1]
+        x = rearrange(x, '(b t) n d -> (b n) t d', t=self.num_frames)
+        x = x + self.temporal_embedding
+        x = rearrange(x, '(b n) t d -> (b t) n d', n=n)
+>>>>>>> 3189cb338d76331c77ebb96f78980b8d2bf557f8
         
         x = self.ln_pre(x)
 
@@ -510,7 +633,26 @@ class ViT_CLIP_UTUNER(nn.Module):
         x = x.unsqueeze(-1).unsqueeze(-1)  # BDTHW for I3D head
 
         return x
+<<<<<<< HEAD
 
+=======
+    
+    def _freeze_stages(self) -> None:
+        ## freeze some parameters
+        for name, param in self.named_parameters():
+            if 'temporal_embedding' not in name and 'ln_post' not in name and 'cls_head' not in name and 'Adapter' not in name and 'shift_conv' not in name:
+                param.requires_grad = False
+
+        for name, param in self.named_parameters():
+            logger.info(f'{name}: {param.requires_grad}')
+        
+        num_param = sum(p.numel() for p in self.parameters() if p.requires_grad)
+        num_total_param = sum(p.numel() for p in self.parameters())
+        logger.info(
+            f'Number of total parameters: {(num_total_param/1.e6):6.2f}, tunable parameters: {(num_param/1.e6):6.2f}'
+        )
+        
+>>>>>>> 3189cb338d76331c77ebb96f78980b8d2bf557f8
     def train(self, mode: bool = True) -> None:
         """Convert the model into training mode while keep layers frozen."""
         super(ViT_CLIP_UTUNER, self).train(mode)
@@ -541,6 +683,7 @@ class PatchShift(nn.Module):
         stride = 1
         multiplier = -1 if inv else 1
         ## Pattern C
+<<<<<<< HEAD
         out[:, :,  0::3, 0::3,:] = torch.roll(feat[:, :,  0::3,0::3,:], shifts=-4*multiplier*stride, dims=1)
         out[:, :,  0::3, 1::3,:] = torch.roll(feat[:, :,  0::3,1::3,:], shifts=multiplier*stride, dims=1)
         out[:, :,  1::3, 0::3,:] = torch.roll(feat[:, :,  1::3,0::3,:], shifts=-multiplier*stride, dims=1)
@@ -585,10 +728,21 @@ class FrameShift(nn.Module):
         # out[:, :,  :, :,:] = torch.roll(feat[:, :,  1::3,2::3,:], shifts=3*multiplier*stride, dims=1)
         # out[:, :,  :, :,:] = torch.roll(feat[:, :,  2::3,1::3,:], shifts=-3*multiplier*stride, dims=1)
         # out[:, :,  :, :,:] = torch.roll(feat[:, :,  2::3,2::3,:], shifts=4*multiplier*stride, dims=1) 
+=======
+        out[:, :, 0::3, 0::3,:] = torch.roll(feat[:, :,  0::3,0::3,:], shifts=-4*multiplier*stride, dims=1)
+        out[:, :, 0::3, 1::3,:] = torch.roll(feat[:, :,  0::3,1::3,:], shifts=multiplier*stride, dims=1)
+        out[:, :, 1::3, 0::3,:] = torch.roll(feat[:, :,  1::3,0::3,:], shifts=-multiplier*stride, dims=1)
+        out[:, :, 0::3, 2::3,:] = torch.roll(feat[:, :,  0::3,2::3,:], shifts=2*multiplier*stride, dims=1)
+        out[:, :, 2::3, 0::3,:] = torch.roll(feat[:, :,  2::3,0::3,:], shifts=-2*multiplier*stride, dims=1)
+        out[:, :, 1::3, 2::3,:] = torch.roll(feat[:, :,  1::3,2::3,:], shifts=3*multiplier*stride, dims=1)
+        out[:, :, 2::3, 1::3,:] = torch.roll(feat[:, :,  2::3,1::3,:], shifts=-3*multiplier*stride, dims=1)
+        out[:, :, 2::3, 2::3,:] = torch.roll(feat[:, :,  2::3,2::3,:], shifts=4*multiplier*stride, dims=1) 
+>>>>>>> 3189cb338d76331c77ebb96f78980b8d2bf557f8
 
         # out = out.view(B, T, H, W, c)
         return out
 
+<<<<<<< HEAD
 class Rand2dPatchShift(nn.Module):
     def __init__(self, inv=False, sx=1,sy=1,w: int=14, h: int=14):
         super(Rand2dPatchShift, self).__init__()
@@ -686,6 +840,8 @@ class Rand2dPatchShift(nn.Module):
         out = rearrange(out, 'b t (h w) C -> b t h w C',h=hsy,w=wsx)
         # out = out.view(B, T, H, W, c)
         return out
+=======
+>>>>>>> 3189cb338d76331c77ebb96f78980b8d2bf557f8
 
 if __name__ == '__main__':
 

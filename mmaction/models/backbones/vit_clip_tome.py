@@ -37,6 +37,7 @@ def is_integer(number):
 def do_nothing(x, mode=None):
     return x
 
+<<<<<<< HEAD
 def bipartite_soft_matching_random2d(metric: torch.Tensor,
                                     w: int, h: int, sx: int, sy: int, r: int,
                                     no_rand: bool = False,
@@ -143,6 +144,8 @@ def bipartite_soft_matching_random2d(metric: torch.Tensor,
 
     return merge, unmerge
 
+=======
+>>>>>>> 3189cb338d76331c77ebb96f78980b8d2bf557f8
 def bipartite_soft_matching(
     metric: torch.Tensor,
     r: int,
@@ -325,6 +328,10 @@ class ToMeAttention(Attention):
         x = self.proj(x)
         x = self.proj_drop(x)
 
+<<<<<<< HEAD
+=======
+        
+>>>>>>> 3189cb338d76331c77ebb96f78980b8d2bf557f8
         # Return k as well here 
         return x, k.mean(1)
 
@@ -512,6 +519,10 @@ class ResidualAttentionBlock(nn.Module):
             tmp_x = torch.cat([xln, tmp_x], dim=1)
             
             
+<<<<<<< HEAD
+=======
+            
+>>>>>>> 3189cb338d76331c77ebb96f78980b8d2bf557f8
             attn_size = self._tome_info["size"] if self._tome_info["prop_attn"] else None
             x_attn, metric = self.cross_attention(xln, tmp_x ,attn_size)
             
@@ -596,7 +607,11 @@ class Transformer(nn.Module):
                     scale,
                     num_frames,
                     dpr[i],
+<<<<<<< HEAD
                     shift= True,
+=======
+                    shift= i in {9,6,3},
+>>>>>>> 3189cb338d76331c77ebb96f78980b8d2bf557f8
                     shift_type='psm',
                 )
                 for i in range(layers)
@@ -648,6 +663,10 @@ class ViT_CLIP_TOME(nn.Module):
         }
         
         
+<<<<<<< HEAD
+=======
+
+>>>>>>> 3189cb338d76331c77ebb96f78980b8d2bf557f8
         self.transformer = Transformer(num_frames, width, layers, heads, self._tome_info, scale=adapter_scale, drop_path=drop_path_rate )
 
         self.ln_post = LayerNorm(width)
@@ -685,7 +704,11 @@ class ViT_CLIP_TOME(nn.Module):
             # for k, v in pretrain_dict.items():
             #     for sp in swaps:
             #         k = k.replace(sp[0], sp[1])
+<<<<<<< HEAD
             
+=======
+                    
+>>>>>>> 3189cb338d76331c77ebb96f78980b8d2bf557f8
             #     out_dict[k] = v
             
             # msg = self.load_state_dict(out_dict, strict=False)

@@ -26,12 +26,15 @@ train_pipeline = [
     dict(type='RandomResizedCrop'),
     dict(type='Resize', scale=(224, 224), keep_ratio=False),
     dict(type='Flip', flip_ratio=0.5),
+<<<<<<< HEAD
     dict(
         type='PytorchVideoWrapper',
         op='RandAugment',
         magnitude=7,
         num_layers=4),
     dict(type='RandomErasing', erase_prob=0.25, mode='rand'),
+=======
+>>>>>>> 3189cb338d76331c77ebb96f78980b8d2bf557f8
     dict(type='FormatShape', input_format='NCTHW'),
     dict(type='PackActionInputs')
 ]
@@ -57,7 +60,11 @@ test_pipeline = [
 ]
 
 train_dataloader = dict(
+<<<<<<< HEAD
     batch_size=10,
+=======
+    batch_size=12,
+>>>>>>> 3189cb338d76331c77ebb96f78980b8d2bf557f8
     num_workers=2,
     persistent_workers=True,
     sampler=dict(type='DefaultSampler', shuffle=True),
@@ -67,7 +74,11 @@ train_dataloader = dict(
         data_prefix=dict(video=data_root),
         pipeline=train_pipeline))
 val_dataloader = dict(
+<<<<<<< HEAD
     batch_size=10,
+=======
+    batch_size=12,
+>>>>>>> 3189cb338d76331c77ebb96f78980b8d2bf557f8
     num_workers=2,
     persistent_workers=True,
     sampler=dict(type='DefaultSampler', shuffle=False),
@@ -134,6 +145,7 @@ param_scheduler = [
 # runtime settings
 default_hooks = dict(
     checkpoint=dict(interval=2, max_keep_ckpts=1,save_best='auto'), 
+<<<<<<< HEAD
     logger=dict(interval=200)
     )
 
@@ -142,6 +154,15 @@ default_hooks = dict(
 #                     rule='greater',
 #                     min_delta=0.0001,
 #                     patience=5)]
+=======
+    logger=dict(interval=100)
+    )
+
+custom_hooks = [dict(type='EarlyStoppingHook',
+                    monitor='acc/top1',
+                    rule='greater',
+                    patience=10)]
+>>>>>>> 3189cb338d76331c77ebb96f78980b8d2bf557f8
 
 
 visualizer = dict(
@@ -149,6 +170,7 @@ visualizer = dict(
     vis_backends=[
         dict(type='LocalVisBackend'),
         dict(type='TensorboardVisBackend', save_dir=f'{work_dir}/tensorboard'),
+<<<<<<< HEAD
         dict(type='WandbVisBackend',init_kwargs=dict(project='vitclip_utuner_base_diving48', name='exp_tps_all_apex',
                                                     resume=True)),
     ],
@@ -156,4 +178,10 @@ visualizer = dict(
 
 resume=True
 
+=======
+        dict(type='WandbVisBackend',init_kwargs=dict(project='vitclip_utuner_base_diving48', name='exp2_baseline_apex')),
+    ],
+)
+
+>>>>>>> 3189cb338d76331c77ebb96f78980b8d2bf557f8
 auto_scale_lr = dict(enable=True, base_batch_size=64)

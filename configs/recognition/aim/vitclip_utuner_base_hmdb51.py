@@ -30,12 +30,15 @@ train_pipeline = [
     dict(type='RandomResizedCrop'),
     dict(type='Resize', scale=(224, 224), keep_ratio=False),
     dict(type='Flip', flip_ratio=0.5),
+<<<<<<< HEAD
     dict(
         type='PytorchVideoWrapper',
         op='RandAugment',
         magnitude=7,
         num_layers=4),
     dict(type='RandomErasing', erase_prob=0.25, mode='rand'),
+=======
+>>>>>>> 3189cb338d76331c77ebb96f78980b8d2bf557f8
     dict(type='FormatShape', input_format='NCTHW'),
     dict(type='PackActionInputs')
 ]
@@ -61,10 +64,15 @@ test_pipeline = [
     dict(type='PackActionInputs')
 ]
 
+<<<<<<< HEAD
 
 batch_size=10
 train_dataloader = dict(
     batch_size=batch_size,
+=======
+train_dataloader = dict(
+    batch_size=6,
+>>>>>>> 3189cb338d76331c77ebb96f78980b8d2bf557f8
     num_workers=2,
     persistent_workers=True,
     sampler=dict(type='DefaultSampler', shuffle=True),
@@ -74,7 +82,11 @@ train_dataloader = dict(
         data_prefix=dict(video=data_root),
         pipeline=train_pipeline))
 val_dataloader = dict(
+<<<<<<< HEAD
     batch_size=batch_size,
+=======
+    batch_size=6,
+>>>>>>> 3189cb338d76331c77ebb96f78980b8d2bf557f8
     num_workers=2,
     persistent_workers=True,
     sampler=dict(type='DefaultSampler', shuffle=False),
@@ -106,7 +118,11 @@ test_cfg = dict(type='TestLoop')
 
 # optimizer
 optim_wrapper = dict(
+<<<<<<< HEAD
     type='ApexOptimWrapper',
+=======
+    type='AmpOptimWrapper',
+>>>>>>> 3189cb338d76331c77ebb96f78980b8d2bf557f8
     optimizer=dict(
         type='AdamW', lr=3e-4, betas=(0.9, 0.999), weight_decay=0.05),
     paramwise_cfg=dict(
@@ -147,16 +163,26 @@ default_hooks = dict(
 custom_hooks = [dict(type='EarlyStoppingHook',
                     monitor='acc/top1',
                     rule='greater',
+<<<<<<< HEAD
                     min_delta=0.001,
                     patience=5)]
+=======
+                    min_delta=0.01,
+                    patience=6)]
+>>>>>>> 3189cb338d76331c77ebb96f78980b8d2bf557f8
 
 
 visualizer = dict(
     type='ActionVisualizer',
     vis_backends=[
         dict(type='LocalVisBackend'),
+<<<<<<< HEAD
         dict(type='TensorboardVisBackend', save_dir=f'{work_dir}/tensorboard'),
         dict(type='WandbVisBackend',init_kwargs=dict(project='vitclip_utuner_base_hmdb51', name='exp_randaug_tps_all_finetune_apex')),
+=======
+        # dict(type='TensorboardVisBackend', save_dir=f'{work_dir}/tensorboard'),
+        dict(type='WandbVisBackend',init_kwargs=dict(project='vitclip_utuner_base_hmdb51', name='exp10_uni_all')),
+>>>>>>> 3189cb338d76331c77ebb96f78980b8d2bf557f8
     ],
 )
 

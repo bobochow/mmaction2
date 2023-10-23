@@ -39,6 +39,11 @@ class Attention(nn.Module):
         self.proj = nn.Linear(dim, dim)
         self.proj_drop = nn.Dropout(proj_drop)
 
+<<<<<<< HEAD
+=======
+        self.n_segment = 8
+
+>>>>>>> 3189cb338d76331c77ebb96f78980b8d2bf557f8
     @staticmethod
     def softmax_with_policy(attn, policy, eps=1e-6):
         B, N, _ = policy.size()
@@ -56,11 +61,19 @@ class Attention(nn.Module):
         attn = (attn + eps / N) / (attn.sum(dim=-1, keepdim=True) + eps)
         return attn.type_as(max_att)
 
+<<<<<<< HEAD
     def forward(self, x):
 
         B, N, C = x.shape
 
         qkv= self.qkv(x)
+=======
+    def forward(self, x, policy, sampler):
+
+        B, N, C = x.shape
+
+        qkv= self.qkv(x, policy, sampler)
+>>>>>>> 3189cb338d76331c77ebb96f78980b8d2bf557f8
         qkv = qkv.reshape(B, N, 3, self.num_heads, C // self.num_heads).permute(
             2, 0, 3, 1, 4
         )
@@ -69,14 +82,25 @@ class Attention(nn.Module):
 
         attn = (q @ k.transpose(-2, -1)) * self.scale
 
+<<<<<<< HEAD
         
         attn = attn.softmax(dim=-1)
         
+=======
+        if policy is None:
+            attn = attn.softmax(dim=-1)
+        else:
+            attn = self.softmax_with_policy(attn, policy)
+>>>>>>> 3189cb338d76331c77ebb96f78980b8d2bf557f8
 
         attn = self.attn_drop(attn)
 
         x = (attn @ v).transpose(1, 2).reshape(B, N, C)
+<<<<<<< HEAD
         x = self.proj(x)
+=======
+        x = self.proj(x, policy, sampler)
+>>>>>>> 3189cb338d76331c77ebb96f78980b8d2bf557f8
         x = self.proj_drop(x)
         return x
 
@@ -90,7 +114,11 @@ class AdaptiveTokenSampler(Attention):
         attn_drop=0.0,
         proj_drop=0.0,
         drop_path=0.0,
+<<<<<<< HEAD
         drop_tokens=False
+=======
+        drop_tokens=False,
+>>>>>>> 3189cb338d76331c77ebb96f78980b8d2bf557f8
     ):
         super(AdaptiveTokenSampler, self).__init__(
             dim,
@@ -102,11 +130,17 @@ class AdaptiveTokenSampler(Attention):
         )
 
         self.drop_path = DropPath(drop_path) if drop_path > 0.0 else nn.Identity()
+<<<<<<< HEAD
         self.out_zero_mask_1 = nn.Parameter(torch.zeros(1, dim), requires_grad=False)
         self.out_zero_mask_2 = nn.Parameter(torch.zeros(1, dim), requires_grad=False)
         self.drop_tokens = drop_tokens
         # self.attn = nn.MultiheadAttention(dim, num_heads)
     
+=======
+        self.out_zero_mask = nn.Parameter(torch.zeros(1, dim), requires_grad=False)
+        self.drop_tokens = drop_tokens
+
+>>>>>>> 3189cb338d76331c77ebb96f78980b8d2bf557f8
     @staticmethod
     def get_unique_indices(indices: Tensor, max_value: int) -> Tensor:
         """
@@ -152,7 +186,11 @@ class AdaptiveTokenSampler(Attention):
             .expand_as(ys)
         )
         steps = (
+<<<<<<< HEAD
             torch.arange(0, n_tokens - 1, device=normalized_cdf.device)
+=======
+            torch.range(0, n_tokens - 2, device=normalized_cdf.device)
+>>>>>>> 3189cb338d76331c77ebb96f78980b8d2bf557f8
             .unsqueeze(0)
             .expand_as(ys_start)
         )
@@ -173,6 +211,7 @@ class AdaptiveTokenSampler(Attention):
         C = v.shape[3] * H
         v_norm = torch.linalg.norm(
             v.transpose(1, 2).reshape(B, attn.shape[2], C), ord=2, dim=2
+<<<<<<< HEAD
         )  # value norm of size [B x L]
         significance_score = attn[:, :, 0].sum(
             dim=1
@@ -184,6 +223,18 @@ class AdaptiveTokenSampler(Attention):
         significance_score = significance_score / significance_score.sum(
             dim=1, keepdim=True
         )  # [B x L-2]
+=======
+        )  # value norm of size [B x T]
+        significance_score = attn[:, :, 0].sum(
+            dim=1
+        )  # attention weights of CLS token of size [B x T]
+        significance_score = significance_score * v_norm  # [B x T]
+        significance_score = significance_score[:, 1:]  # [B x T-1]
+
+        significance_score = significance_score / significance_score.sum(
+            dim=1, keepdim=True
+        )  # [B x T-1]
+>>>>>>> 3189cb338d76331c77ebb96f78980b8d2bf557f8
         sorted_scores, sorted_indices = torch.sort(
             significance_score, descending=False, dim=1
         )
@@ -193,23 +244,36 @@ class AdaptiveTokenSampler(Attention):
     def inverse_transform_sampling(
         self,
         sorted_scores: Tensor,
+<<<<<<< HEAD
         sorted_indices: Tensor, # BT, L-2
         attn: Tensor,  # BT, H, HW+2, HW+2
         n_tokens: int,
         raw_x: Tensor, # BT, HW+2, D
         
+=======
+        sorted_indices: Tensor,
+        attn: Tensor,
+        n_tokens: int,
+        raw_x: Tensor,
+        n_ref_tokens: int,
+>>>>>>> 3189cb338d76331c77ebb96f78980b8d2bf557f8
     ) -> (Tensor, Tensor):
         """
         Sample tokens based on their significance scores.
         """
         B, N, C = raw_x.shape
 
+<<<<<<< HEAD
         cdf = torch.cumsum(sorted_scores, dim=1)  # [B x N-2]
+=======
+        cdf = torch.cumsum(sorted_scores, dim=1)  # [B x T-1]
+>>>>>>> 3189cb338d76331c77ebb96f78980b8d2bf557f8
 
         normalized_cdf = (  # normalized cdf
             cdf - cdf.min(dim=1)[0].unsqueeze(dim=1)
         ) / ((cdf.max(dim=1)[0] - cdf.min(dim=1)[0]) / 1.0).unsqueeze(dim=1)
 
+<<<<<<< HEAD
         # ys = self.create_ys(normalized_cdf, n_ref_tokens).unsqueeze(
         #     dim=2
         # )  # sampled values from y-axis of size [B, n-2, 1]
@@ -223,6 +287,16 @@ class AdaptiveTokenSampler(Attention):
         # expanded_ys = torch.Tensor.expand(ys, (B, n_tokens - 1, N - 2))
         expanded_ys = torch.Tensor.expand(ys, (B, ys.shape[1], ys.shape[1]))
         diff_tokens = ys.shape[1] - (N - 2)
+=======
+        ys = self.create_ys(normalized_cdf, n_ref_tokens).unsqueeze(
+            dim=2
+        )  # sampled values from y-axis of size [B, n-1, 1]
+        normalized_cdf = normalized_cdf.unsqueeze(dim=1)  # [B, 1, N - 1]
+
+        # expanded_ys = torch.Tensor.expand(ys, (B, n_tokens - 1, N - 1))
+        expanded_ys = torch.Tensor.expand(ys, (B, ys.shape[1], ys.shape[1]))
+        diff_tokens = ys.shape[1] - (N - 1)
+>>>>>>> 3189cb338d76331c77ebb96f78980b8d2bf557f8
         tokens_to_pick_ind = torch.min(
             torch.abs(expanded_ys - F.pad(normalized_cdf, (diff_tokens, 0))),
             dim=2,
@@ -233,6 +307,7 @@ class AdaptiveTokenSampler(Attention):
         # Offsetting token indices
         tokens_to_pick_ind = tokens_to_pick_ind - diff_tokens
 
+<<<<<<< HEAD
         # Sort attention matrix and add CLS,T-CLS weights.
         attn_sorted = torch.gather(
             attn[:, :, 2:],
@@ -253,6 +328,28 @@ class AdaptiveTokenSampler(Attention):
         unique_indices = self.get_unique_indices(
             indices = tokens_to_pick_ind, max_value = n_tokens - 2
         )[:, : n_tokens - 2] # BT, N-2
+=======
+        # Sort attention matrix and add CLS weights.
+        attn_sorted = torch.gather(
+            attn[:, :, 1:],
+            2,
+            sorted_indices.unsqueeze(1)
+            .unsqueeze(-1)
+            .expand(B, self.num_heads, N - 1, N),
+        )  # [B x h x T-1 x T]
+
+        attn_tmp = F.pad(attn_sorted, (0, 0, 0, 1), value=0.0)  # [B x h x T x T]
+
+        # # Sort tokens and add CLS token.
+        raw_x_tmp = torch.gather(
+            raw_x[:, 1:], 1, sorted_indices.unsqueeze(-1).expand(B, N - 1, C)
+        )
+        raw_x_tmp = F.pad(raw_x_tmp, (0, 0, 0, 1), value=0.0)  # [B x n x C]
+
+        unique_indices = self.get_unique_indices(
+            indices=tokens_to_pick_ind, max_value=N - 1
+        )[:, : N - 1]
+>>>>>>> 3189cb338d76331c77ebb96f78980b8d2bf557f8
 
         # Prune the attention matrix and input tokens.
         attn_tmp = torch.gather(
@@ -260,6 +357,7 @@ class AdaptiveTokenSampler(Attention):
             2,
             unique_indices.unsqueeze(1)
             .unsqueeze(3)
+<<<<<<< HEAD
             .expand(B, self.num_heads, n_tokens - 2, N),
         )
         raw_x_tmp = torch.gather(
@@ -376,6 +474,25 @@ class AdaptiveTokenSampler(Attention):
         x = x * policy
         x = self.proj_drop(x)
         return x, selected_x, policy, sampler
+=======
+            .expand(B, self.num_heads, n_tokens - 1, N),
+        )
+        raw_x_tmp = torch.gather(
+            raw_x_tmp, 1, unique_indices.unsqueeze(2).expand(B, n_tokens - 1, C)
+        )
+
+        attn_tmp = torch.cat([attn[:, :, 0:1], attn_tmp], dim=2)
+        raw_x_tmp = torch.cat([raw_x[:, 0:1], raw_x_tmp], dim=1)
+
+        policy = (unique_indices != (N - 1)).unsqueeze(-1).float()
+        policy = F.pad(policy, (0, 0, 1, 0), value=1.0)
+        selected_x = raw_x_tmp
+        attn = attn_tmp
+
+        sampler = torch.nonzero(policy)
+
+        return selected_x, attn, policy, sampler
+>>>>>>> 3189cb338d76331c77ebb96f78980b8d2bf557f8
 
 
 class Adapter(nn.Module):
@@ -420,6 +537,7 @@ class ATSBlock(nn.Module):
         self,
         dim,
         num_heads,
+<<<<<<< HEAD
         qkv_bias=False,
         qk_scale=None,
         attn_drop=0.0,
@@ -435,6 +553,23 @@ class ATSBlock(nn.Module):
         self.ln_1 = LayerNorm(self.d_model)
         self.ln_2 = LayerNorm(self.d_model)
         
+=======
+        mlp_ratio=4.0,
+        qkv_bias=False,
+        qk_scale=None,
+        drop=0.0,
+        attn_drop=0.0,
+        drop_path=0.0,
+        act_layer=nn.GELU,
+        norm_layer=nn.LayerNorm,
+        insert_control_point=False,
+        drop_tokens=False,
+    ):
+        super().__init__()
+        self.insert_control_point = insert_control_point
+        self.norm1 = norm_layer(dim)
+
+>>>>>>> 3189cb338d76331c77ebb96f78980b8d2bf557f8
         self.attn = AdaptiveTokenSampler(
             dim=dim,
             num_heads=num_heads,
@@ -446,6 +581,7 @@ class ATSBlock(nn.Module):
         )
 
         self.drop_path = DropPath(drop_path) if drop_path > 0.0 else nn.Identity()
+<<<<<<< HEAD
         
         self.mlp = nn.Sequential(OrderedDict([
             ("c_fc", nn.Linear(self.d_model, self.d_model * 4)),
@@ -458,6 +594,16 @@ class ATSBlock(nn.Module):
         self.scale = scale
         self.T_Adapter = Adapter(self.d_model, skip_connect=False)
         
+=======
+        self.norm2 = norm_layer(dim)
+        mlp_hidden_dim = int(dim * mlp_ratio)
+        self.mlp = Mlp(
+            in_features=dim,
+            hidden_features=mlp_hidden_dim,
+            act_layer=act_layer,
+            drop=drop,
+        )
+>>>>>>> 3189cb338d76331c77ebb96f78980b8d2bf557f8
 
     def forward(
         self,
@@ -465,6 +611,7 @@ class ATSBlock(nn.Module):
         n_tokens,
         policy: Tensor = None,
         sampler: Tensor = None,
+<<<<<<< HEAD
         
     ):
         ## x shape [ BT, HW+1, D]
@@ -484,10 +631,17 @@ class ATSBlock(nn.Module):
         
         x_out, selected_x, policy, sampler = self.attn(
             x=self.ln_1(x),
+=======
+        n_ref_tokens: int = 197,
+    ):
+        x_out, selected_x, policy, sampler = self.attn(
+            x=self.norm1(x),
+>>>>>>> 3189cb338d76331c77ebb96f78980b8d2bf557f8
             policy=policy,
             sampler=sampler,
             n_tokens=n_tokens,
             raw_x=x,
+<<<<<<< HEAD
         )
         x = selected_x + self.drop_path(self.S_Adapter(x_out))
         x = x * policy
@@ -504,12 +658,25 @@ class ATSBlock(nn.Module):
         
         policy= torch.cat([policy[:, :1], t_cls_polict ,policy[:, 1:]], dim=1)
         
+=======
+            n_ref_tokens=n_ref_tokens,
+        )
+        x = selected_x + self.drop_path(x_out)
+        x = x * policy
+        out = self.mlp(x=self.norm2(x), policy=policy, sampler=sampler)
+        x = x + self.drop_path(out)
+        x = x * policy
+>>>>>>> 3189cb338d76331c77ebb96f78980b8d2bf557f8
         return x, policy
 
 class ResidualAttentionBlock(nn.Module):
     def __init__(self,
                 d_model: int,
                 n_head: int,
+<<<<<<< HEAD
+=======
+                attn_mask: torch.Tensor = None,
+>>>>>>> 3189cb338d76331c77ebb96f78980b8d2bf557f8
                 scale=1.,
                 num_frames=8,
                 drop_path=0.,
@@ -519,8 +686,12 @@ class ResidualAttentionBlock(nn.Module):
         
         self.d_model=d_model
         
+<<<<<<< HEAD
         # self.attn = nn.MultiheadAttention(d_model, n_head)
         self.attn=Attention(d_model, n_head, qkv_bias=True)
+=======
+        self.attn = nn.MultiheadAttention(d_model, n_head)
+>>>>>>> 3189cb338d76331c77ebb96f78980b8d2bf557f8
         self.ln_1 = LayerNorm(d_model)
         self.mlp = nn.Sequential(OrderedDict([
             ("c_fc", nn.Linear(d_model, d_model * 4)),
@@ -528,6 +699,10 @@ class ResidualAttentionBlock(nn.Module):
             ("c_proj", nn.Linear(d_model * 4, d_model))
         ]))
         self.ln_2 = LayerNorm(d_model)
+<<<<<<< HEAD
+=======
+        self.attn_mask = attn_mask
+>>>>>>> 3189cb338d76331c77ebb96f78980b8d2bf557f8
         self.n_head = n_head
         
         self.shift = shift
@@ -544,6 +719,7 @@ class ResidualAttentionBlock(nn.Module):
         if self.shift:
             self.shift_op=PatchShift( inv=False)
 
+<<<<<<< HEAD
     # def attention(
     #         self, x: torch.Tensor , y: torch.Tensor
     #     ) -> Tuple[torch.Tensor, torch.Tensor]:
@@ -577,6 +753,41 @@ class ResidualAttentionBlock(nn.Module):
     #         out = out.permute(1,0,2)
             
     #         return out
+=======
+    def attention(
+            self, x: torch.Tensor , y: torch.Tensor
+        ) -> Tuple[torch.Tensor, torch.Tensor]:
+            
+            x=x.permute(1,0,2) #  HW+2, BT, D
+            y=y.permute(1,0,2) #  HW+2, BT, D
+            
+            q = (x @ self.attn.in_proj_weight[:self.d_model].T
+                ) + self.attn.in_proj_bias[:self.d_model]
+
+            k = (y @ self.attn.in_proj_weight[self.d_model:-self.d_model].T
+                ) + self.attn.in_proj_bias[self.d_model:-self.d_model]
+            v = (y @ self.attn.in_proj_weight[-self.d_model:].T
+                ) + self.attn.in_proj_bias[-self.d_model:]
+            Tx, Ty, N = q.size(0), k.size(0), q.size(1)
+            q = q.view(Tx, N, self.attn.num_heads,
+                    self.attn.head_dim).permute(1, 2, 0, 3) # N num_heads Tx D_head
+            k = k.view(Ty, N, self.attn.num_heads,
+                    self.attn.head_dim).permute(1, 2, 0, 3) # N num_heads Ty D_head
+            v = v.view(Ty, N, self.attn.num_heads,
+                    self.attn.head_dim).permute(1, 2, 0, 3)
+            
+            aff = (q @ k.transpose(-2, -1) / (self.attn.head_dim**0.5)) # (N, num_heads, Tx, Ty)
+            
+            aff = aff.softmax(dim=-1)
+            
+            out = aff @ v  # N num_heads Tx D_head
+            out = out.permute(2, 0, 1, 3).flatten(2)
+            out = self.attn.out_proj(out) # N Tx D
+            
+            out=out.permute(1,0,2)
+            
+            return out
+>>>>>>> 3189cb338d76331c77ebb96f78980b8d2bf557f8
 
     def forward(
         self,
@@ -589,7 +800,11 @@ class ResidualAttentionBlock(nn.Module):
         
         xt = rearrange(class_token, '(b t) n d -> (b n) t d', t=self.num_frames)
         x_ln1=self.ln_1(xt)
+<<<<<<< HEAD
         xt = self.T_Adapter(self.attn(x_ln1))
+=======
+        xt = self.T_Adapter(self.attention(x_ln1,x_ln1)[0])
+>>>>>>> 3189cb338d76331c77ebb96f78980b8d2bf557f8
         
         xt = rearrange(xt, '(b n) t d -> (b t) n d', n=1)
         # x = x + self.drop_path(xt)
@@ -597,7 +812,11 @@ class ResidualAttentionBlock(nn.Module):
         
         # spatial adaptation
         x_ln2=self.ln_1(x)
+<<<<<<< HEAD
         x = x + self.S_Adapter(self.attn(x_ln2))
+=======
+        x = x + self.S_Adapter(self.attention(x_ln2,x_ln2))
+>>>>>>> 3189cb338d76331c77ebb96f78980b8d2bf557f8
         
         x= torch.cat([x[:, :1,:], x[:, 2:,:]], dim=1) # [ BT, HW+1, D]
         xn = self.ln_2(x)
@@ -608,6 +827,7 @@ class ResidualAttentionBlock(nn.Module):
 
 
 class Transformer(nn.Module):
+<<<<<<< HEAD
     def __init__(self, num_frames, 
                 width: int,
                 layers: int,
@@ -620,6 +840,10 @@ class Transformer(nn.Module):
                 drop_tokens=True,
                 ats_blocks=None,
                 num_tokens=None):
+=======
+    def __init__(self, num_frames, width: int, layers: int, heads: int, attn_mask: torch.Tensor = None, 
+                scale=1., drop_path=0.1,ats_blocks=None,num_tokens=None):
+>>>>>>> 3189cb338d76331c77ebb96f78980b8d2bf557f8
         super().__init__()
         self.width = width
         self.layers = layers
@@ -645,6 +869,7 @@ class Transformer(nn.Module):
         #     ]
         # )
         
+<<<<<<< HEAD
         self.resblocks = []
         for i in range(layers):
             if i in self.ats_blocks:
@@ -666,6 +891,25 @@ class Transformer(nn.Module):
                     ResidualAttentionBlock(
                     width,
                     heads,
+=======
+        self.blocks = []
+        for i in range(layers):
+            if i in self.ats_blocks:
+                self.blocks.append(
+                    ATSBlock(
+                        dim=width,
+                        num_heads=heads,
+                        drop_path=dpr[i],
+                        
+                    )
+                )
+            else:
+                self.blocks.append(
+                    ResidualAttentionBlock(
+                    width,
+                    heads,
+                    attn_mask,
+>>>>>>> 3189cb338d76331c77ebb96f78980b8d2bf557f8
                     scale,
                     num_frames,
                     dpr[i],
@@ -673,24 +917,40 @@ class Transformer(nn.Module):
                     shift_type='psm',
                     )
                 )
+<<<<<<< HEAD
         self.resblocks = nn.ModuleList(self.resblocks)
+=======
+        self.blocks = nn.ModuleList(self.blocks)
+>>>>>>> 3189cb338d76331c77ebb96f78980b8d2bf557f8
         
         
     def forward(self, x: torch.Tensor):
         
         B = x.shape[0]
+<<<<<<< HEAD
         init_n = x.shape[1]+1
+=======
+        init_n = x.shape[1]
+>>>>>>> 3189cb338d76331c77ebb96f78980b8d2bf557f8
         # policies = []
         policy = torch.ones(B, init_n, 1, dtype=x.dtype, device=x.device)
         sampler = torch.nonzero(policy)
         # idx = 0
+<<<<<<< HEAD
         for idx, blk in enumerate(self.resblocks):
+=======
+        for idx, blk in enumerate(self.blocks):
+>>>>>>> 3189cb338d76331c77ebb96f78980b8d2bf557f8
             if idx in self.ats_blocks:
                 x, policy = blk(
                     x=x,
                     n_tokens=self.num_tokens[idx],
                     policy=policy,
                     sampler=sampler,
+<<<<<<< HEAD
+=======
+                    n_ref_tokens=init_n,
+>>>>>>> 3189cb338d76331c77ebb96f78980b8d2bf557f8
                 )
                 # idx += 1
                 # policies.append(policy)
@@ -704,6 +964,7 @@ class Transformer(nn.Module):
 @MODELS.register_module()
 class ViT_CLIP_ATS(nn.Module):
     ## ViT definition in CLIP image encoder
+<<<<<<< HEAD
     def __init__(self, 
                 input_resolution: int, 
                 num_frames: int, 
@@ -722,6 +983,11 @@ class ViT_CLIP_ATS(nn.Module):
                 # ats_blocks=[8, 9, 10, 11],
                 ats_blocks=[6],
                 num_tokens=[198, 198, 198, 198, 198, 198, 198, 198, 198, 198, 198, 198]):
+=======
+    def __init__(self, input_resolution: int, num_frames: int, patch_size: int, width: int, layers: int, heads: int, drop_path_rate,  adapter_scale=0.5, pretrained=None,
+                ats_blocks=[3, 4, 5, 6, 7, 8, 9, 10, 11],
+                num_tokens=[197, 197, 197, 197, 197, 197, 197, 197, 197, 197, 197, 197]):
+>>>>>>> 3189cb338d76331c77ebb96f78980b8d2bf557f8
         super().__init__()
         self.input_resolution = input_resolution
         self.pretrained = pretrained
@@ -737,6 +1003,7 @@ class ViT_CLIP_ATS(nn.Module):
         self.temporal_embedding = nn.Parameter(torch.zeros(1, num_frames, width))
 
         
+<<<<<<< HEAD
         self.transformer = Transformer( num_frames, 
                                         width, 
                                         layers, 
@@ -749,6 +1016,9 @@ class ViT_CLIP_ATS(nn.Module):
                                         drop_tokens=drop_tokens,
                                         ats_blocks=ats_blocks,
                                         num_tokens=num_tokens)
+=======
+        self.transformer = Transformer(num_frames, width, layers, heads,  scale=adapter_scale, drop_path=drop_path_rate,ats_blocks=ats_blocks,num_tokens=num_tokens)
+>>>>>>> 3189cb338d76331c77ebb96f78980b8d2bf557f8
 
         self.ln_post = LayerNorm(width)
         
@@ -780,6 +1050,7 @@ class ViT_CLIP_ATS(nn.Module):
             pretrain_dict = clip_model.visual.state_dict()
             del clip_model
             del pretrain_dict['proj']
+<<<<<<< HEAD
             
             swaps = [('in_proj_', 'qkv.'), ('out_proj', 'proj')]
             
@@ -793,6 +1064,9 @@ class ViT_CLIP_ATS(nn.Module):
             msg = self.load_state_dict(out_dict, strict=False)
             
             # msg = self.load_state_dict(pretrain_dict, strict=False)
+=======
+            msg = self.load_state_dict(pretrain_dict, strict=False)
+>>>>>>> 3189cb338d76331c77ebb96f78980b8d2bf557f8
             logger.info('Missing keys: {}'.format(msg.missing_keys))
             logger.info('Unexpected keys: {}'.format(msg.unexpected_keys))
             logger.info(f"=> loaded successfully '{self.pretrained}'")

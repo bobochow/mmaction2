@@ -1,5 +1,9 @@
 from collections import OrderedDict
+<<<<<<< HEAD
 from typing import Tuple, Union,Optional
+=======
+from typing import Tuple, Union
+>>>>>>> 3189cb338d76331c77ebb96f78980b8d2bf557f8
 from timm.models.layers import DropPath, to_2tuple, trunc_normal_
 import numpy as np
 import torch
@@ -55,9 +59,12 @@ class QuickGELU(nn.Module):
 class ResidualAttentionBlock(nn.Module):
     def __init__(self, d_model: int, n_head: int, attn_mask: torch.Tensor = None,
                 scale=1., num_frames=8, drop_path=0.,
+<<<<<<< HEAD
                 # rel_pos_embed: bool = True,
                 # rel_pos_zero_init: bool = False,
                 # input_size: Optional[Tuple[int]] = None,
+=======
+>>>>>>> 3189cb338d76331c77ebb96f78980b8d2bf557f8
                 shift: bool = False, 
                 shift_type: str = 'psm'):
         super().__init__()
@@ -72,7 +79,11 @@ class ResidualAttentionBlock(nn.Module):
         self.ln_2 = LayerNorm(d_model)
         self.attn_mask = attn_mask
         self.n_head = n_head
+<<<<<<< HEAD
         self.d_model=d_model
+=======
+        
+>>>>>>> 3189cb338d76331c77ebb96f78980b8d2bf557f8
         self.shift = shift
         self.shift_type = shift_type
 
@@ -84,6 +95,11 @@ class ResidualAttentionBlock(nn.Module):
         self.drop_path = DropPath(drop_path) if drop_path > 0. else nn.Identity()
         
         
+<<<<<<< HEAD
+=======
+                
+        
+>>>>>>> 3189cb338d76331c77ebb96f78980b8d2bf557f8
         if self.shift:
             if self.shift_type == 'psm':
                 # self.shift_op = PatchShift(self.n_head, False, 1)
@@ -93,6 +109,7 @@ class ResidualAttentionBlock(nn.Module):
             
             elif self.shift_type == 'tsm':
                 self.shift_op = TemporalShift(8)
+<<<<<<< HEAD
         
         # self.rel_pos_embed = rel_pos_embed
         # self.rel_pos_zero_init = rel_pos_zero_init
@@ -149,6 +166,16 @@ class ResidualAttentionBlock(nn.Module):
         out = self.attn.out_proj(out) # N Tx D
         
         return out 
+=======
+
+    def attention(self, x: torch.Tensor):
+        self.attn_mask = self.attn_mask.to(dtype=x.dtype, device=x.device) if self.attn_mask is not None else None
+        return self.attn(x, x, x, need_weights=False, attn_mask=self.attn_mask)[0]
+
+    def cross_attention(self, q: torch.Tensor, k: torch.Tensor, v: torch.Tensor):
+        self.attn_mask = self.attn_mask.to(dtype=q.dtype, device=q.device) if self.attn_mask is not None else None
+        return self.attn(q, k, v, need_weights=False, attn_mask=self.attn_mask)[0]
+>>>>>>> 3189cb338d76331c77ebb96f78980b8d2bf557f8
     
     def forward(self, x: torch.Tensor, ):
         ## x shape [HW+1, BT, D]
@@ -164,8 +191,13 @@ class ResidualAttentionBlock(nn.Module):
         class_token=x[:1,:,:] # 1, BT, D
         
         xt = rearrange(class_token, 'n (b t) d -> t (b n) d', t=self.num_frames)
+<<<<<<< HEAD
         ln_xt=self.ln_1(xt)
         xt = self.T_Adapter(self.attention(ln_xt,ln_xt))
+=======
+        
+        xt = self.T_Adapter(self.attention(self.ln_1(xt)))
+>>>>>>> 3189cb338d76331c77ebb96f78980b8d2bf557f8
         xt = rearrange(xt, 't (b n) d -> n (b t) d', n=1)
         # x = x + self.drop_path(xt)
         x= torch.cat([x[:1,:,:], xt, x[1:,:,:]], dim=0)# x shape [HW+2, BT, D]
@@ -180,17 +212,31 @@ class ResidualAttentionBlock(nn.Module):
             N = NT // self.num_frames
             H = W = int(L**0.5)
             
+<<<<<<< HEAD
+=======
+            
+>>>>>>> 3189cb338d76331c77ebb96f78980b8d2bf557f8
             tmp_x = rearrange(tmp_x, '(h w) (b t) c -> b t h w c', b=N, t = T, h=H, w=W, c=C)
             tmp_x = self.shift_op(tmp_x)
             tmp_x = rearrange(tmp_x, 'b t h w c -> (b t) c h w')
             
             tmp_x = tmp_x.view(NT, C, -1).permute(2, 0, 1).contiguous() # P NT C
+<<<<<<< HEAD
             # tmp_x = torch.cat([xln, tmp_x], dim=0)
             
             x = x + self.S_Adapter(self.attention(xln,xln)) + self.drop_path(self.T_Adapter(self.attention(xln,tmp_x)))
             
         else:
             x = x + self.drop_path(self.S_Adapter(self.attention(self.ln_1(x),self.ln_1(x))))
+=======
+            tmp_x = torch.cat([xln, tmp_x], dim=0)
+            
+            
+            x = x + self.S_Adapter(self.cross_attention(xln,tmp_x,tmp_x))
+        else:
+            x = x + self.S_Adapter(self.attention(self.ln_1(x)))
+        
+>>>>>>> 3189cb338d76331c77ebb96f78980b8d2bf557f8
         
         ## joint adaptation
         x= torch.cat([x[:1,:,:], x[2:,:,:]], dim=0) # [HW+2, BT, D]
