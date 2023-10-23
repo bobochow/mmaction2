@@ -1,68 +1,68 @@
 _base_ = [
-    '../../_base_/models/vitclip_zeroI2V_base.py', '../../_base_/default_runtime.py'
+    '../../_base_/models/swin_tiny_2D_tps.py', '../../_base_/default_runtime.py'
 ]
 
-# model settings
 model = dict(
-    backbone=dict(drop_path_rate=0.2, adapter_scale=0.5, num_frames=32,with_t_cls_token=True,linear_adapter=False,bottleneck=192,share_adapter=False),
-    cls_head=dict(num_classes=48,label_smooth_eps=0.02),
-)
+    backbone=dict(
+        pretrained=  # noqa: E251
+        'https://download.openmmlab.com/mmaction/v1.0/recognition/swin/swin_tiny_patch4_window7_224.pth'  # noqa: E501
+    ),
+    cls_head=dict(num_classes=48,label_smooth_eps=0.1))
 
 # dataset settings
 dataset_type = 'VideoDataset'
-data_root = 'data/diving48/videos'
-data_root_val = 'data/diving48/videos'
+data_root = 'data/diving48'
+data_root_val = 'data/diving48'
 ann_file_train = 'data/diving48/diving48_train_list_videos.txt'
 ann_file_val = 'data/diving48/diving48_val_list_videos.txt'
 ann_file_test = 'data/diving48/diving48_val_list_videos.txt'
 
-total_epochs = 50
-num_frames=32
-work_dir = './work_dirs/vitclip_zeroI2V_base_diving48'
+work_dir = './work_dirs/swin_tiny_tps_diving48'
+
+file_client_args = dict(io_backend='disk')
 train_pipeline = [
-    dict(type='DecordInit'),
-    
-    dict(type='UniformSample', clip_len=num_frames, num_clips=1),
+    dict(type='DecordInit', **file_client_args),
+    dict(type='SampleFrames', clip_len=32, frame_interval=2, num_clips=1),
     dict(type='DecordDecode'),
     dict(type='Resize', scale=(-1, 256)),
-    
     dict(type='RandomResizedCrop'),
     dict(type='Resize', scale=(224, 224), keep_ratio=False),
     dict(type='Flip', flip_ratio=0.5),
-    dict(
-        type='PytorchVideoWrapper',
-        op='RandAugment',
-        magnitude=7,
-        num_layers=4),
-    dict(type='RandomErasing', erase_prob=0.25, mode='rand'),
     dict(type='FormatShape', input_format='NCTHW'),
     dict(type='PackActionInputs')
 ]
 val_pipeline = [
-    dict(type='DecordInit'),
-    
-    dict(type='UniformSample', clip_len=num_frames, num_clips=1,test_mode=True),
+    dict(type='DecordInit', **file_client_args),
+    dict(
+        type='SampleFrames',
+        clip_len=32,
+        frame_interval=2,
+        num_clips=1,
+        test_mode=True),
     dict(type='DecordDecode'),
     dict(type='Resize', scale=(-1, 256)),
     dict(type='CenterCrop', crop_size=224),
-    dict(type='Flip', flip_ratio=0),
     dict(type='FormatShape', input_format='NCTHW'),
     dict(type='PackActionInputs')
 ]
 test_pipeline = [
-    dict(type='DecordInit'),
-    dict(type='UniformSample', clip_len=num_frames, num_clips=4,test_mode=True),
+    dict(type='DecordInit', **file_client_args),
+    dict(
+        type='SampleFrames',
+        clip_len=32,
+        frame_interval=2,
+        num_clips=4,
+        test_mode=True),
     dict(type='DecordDecode'),
     dict(type='Resize', scale=(-1, 224)),
     dict(type='ThreeCrop', crop_size=224),
-    dict(type='Flip', flip_ratio=0),
     dict(type='FormatShape', input_format='NCTHW'),
     dict(type='PackActionInputs')
 ]
 
 train_dataloader = dict(
     batch_size=8,
-    num_workers=2,
+    num_workers=8,
     persistent_workers=True,
     sampler=dict(type='DefaultSampler', shuffle=True),
     dataset=dict(
@@ -72,7 +72,7 @@ train_dataloader = dict(
         pipeline=train_pipeline))
 val_dataloader = dict(
     batch_size=8,
-    num_workers=2,
+    num_workers=8,
     persistent_workers=True,
     sampler=dict(type='DefaultSampler', shuffle=False),
     dataset=dict(
@@ -83,7 +83,7 @@ val_dataloader = dict(
         test_mode=True))
 test_dataloader = dict(
     batch_size=1,
-    num_workers=1,
+    num_workers=8,
     persistent_workers=True,
     sampler=dict(type='DefaultSampler', shuffle=False),
     dataset=dict(
@@ -96,28 +96,24 @@ test_dataloader = dict(
 val_evaluator = dict(type='AccMetric')
 test_evaluator = val_evaluator
 
+total_epochs = 30
+
 train_cfg = dict(
-    type='EpochBasedTrainLoop', max_epochs=total_epochs, val_begin=2, val_interval=2)
+    type='EpochBasedTrainLoop', max_epochs=total_epochs, val_begin=1, val_interval=2)
 val_cfg = dict(type='ValLoop')
 test_cfg = dict(type='TestLoop')
 
-# optimizer
 optim_wrapper = dict(
     type='AmpOptimWrapper',
     optimizer=dict(
-        type='AdamW', lr=3e-4, betas=(0.9, 0.999), weight_decay=0.05),
+        type='AdamW', lr=1e-3, betas=(0.9, 0.999), weight_decay=0.02),
+    constructor='SwinOptimWrapperConstructor',
     paramwise_cfg=dict(
-        class_embedding=dict(decay_mult=0.),
-        positional_embedding=dict(decay_mult=0.),
-        ln_1=dict(decay_mult=0.),
-        ln_2=dict(decay_mult=0.),
-        ln_pre=dict(decay_mult=0.),
-        ln_post=dict(decay_mult=0.),
-        ),
-    
-    )
+        absolute_pos_embed=dict(decay_mult=0.),
+        relative_position_bias_table=dict(decay_mult=0.),
+        norm=dict(decay_mult=0.),
+        backbone=dict(lr_mult=0.1)))
 
-# learning policy
 param_scheduler = [
     dict(
         type='LinearLR',
@@ -135,28 +131,26 @@ param_scheduler = [
         end=total_epochs)
 ]
 
-# runtime settings
 default_hooks = dict(
-    checkpoint=dict(interval=2, max_keep_ckpts=1,save_best='auto'), 
-    logger=dict(interval=200)
-    )
-
-custom_hooks = [dict(type='EarlyStoppingHook',
-                    monitor='acc/top1',
-                    rule='greater',
-                    min_delta=0.001,
-                    patience=10)]
-
+    checkpoint=dict(interval=3, max_keep_ckpts=2,save_best='auto'), logger=dict(interval=100))
 
 visualizer = dict(
     type='ActionVisualizer',
     vis_backends=[
         dict(type='LocalVisBackend'),
         dict(type='TensorboardVisBackend', save_dir=f'{work_dir}/tensorboard'),
-        dict(type='WandbVisBackend',init_kwargs=dict(project='vitclip_zeroI2V_base_diving48', name='exp_ths_ada_all_t_CLS_apex')),
+        dict(type='WandbVisBackend',init_kwargs=dict(project='swin_tiny_tps_diving48', name='swin_tiny_tps_diving48_exp1')),
     ],
 )
 
+custom_hooks = [dict(type='EarlyStoppingHook',
+                    monitor='acc/top1',
+                    rule='greater',
+                    patience=5)]
+
+
+# Default setting for scaling LR automatically
+#   - `enable` means enable scaling LR automatically
+#       or not by default.
+#   - `base_batch_size` = (8 GPUs) x (8 samples per GPU).
 auto_scale_lr = dict(enable=True, base_batch_size=64)
-
-

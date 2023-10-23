@@ -4,7 +4,11 @@ _base_ = [
 
 # model settings
 model = dict(
+<<<<<<< HEAD
+    backbone=dict(drop_path_rate=0.2, adapter_scale=0.5, num_frames=32),
+=======
     backbone=dict(drop_path_rate=0.2, adapter_scale=0.5, num_frames=32,t_ats_fraction=3,s_ats_fraction=0.5),
+>>>>>>> 3189cb338d76331c77ebb96f78980b8d2bf557f8
     cls_head=dict(num_classes=51,label_smooth_eps=0.02),
 )
 

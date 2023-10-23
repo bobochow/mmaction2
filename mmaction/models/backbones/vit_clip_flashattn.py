@@ -14,6 +14,10 @@ from einops import rearrange
 from mmaction.registry import MODELS
 
 # from ..builder import BACKBONES
+from flash_attn.modules.mha import MHA as FlashMHA
+from flash_attn.modules.mlp import Mlp as FlashMlp
+
+from torch.utils.checkpoint import checkpoint
 
 logger = MMLogger.get_current_instance()
 
@@ -55,24 +59,35 @@ class QuickGELU(nn.Module):
 class ResidualAttentionBlock(nn.Module):
     def __init__(self, d_model: int, n_head: int, attn_mask: torch.Tensor = None,
                 scale=1., num_frames=8, drop_path=0.,
-                # rel_pos_embed: bool = True,
-                # rel_pos_zero_init: bool = False,
-                # input_size: Optional[Tuple[int]] = None,
                 shift: bool = False, 
-                shift_type: str = 'psm'):
+                shift_type: str = 'psm',
+                use_flash_attn: bool = False,
+                ):
         super().__init__()
 
-        self.attn = nn.MultiheadAttention(d_model, n_head)
+        self.use_flash_attn = use_flash_attn
+        if self.use_flash_attn:
+            self.attn = FlashMHA(d_model, n_head, cross_attn=False, bias=True, dropout=0., use_flash_attn=True)
+        else:
+            self.attn = nn.MultiheadAttention(d_model, n_head)
+        
         self.ln_1 = LayerNorm(d_model)
-        self.mlp = nn.Sequential(OrderedDict([
-            ("c_fc", nn.Linear(d_model, d_model * 4)),
-            ("gelu", QuickGELU()),
-            ("c_proj", nn.Linear(d_model * 4, d_model))
-        ]))
+        
+        if self.use_flash_attn:
+            mlp_width = int(d_model * 4)
+            self.mlp = FlashMlp(d_model, hidden_features=mlp_width, activation=QuickGELU())
+        else:
+            self.mlp = nn.Sequential(OrderedDict([
+                ("c_fc", nn.Linear(d_model, d_model * 4)),
+                ("gelu", QuickGELU()),
+                ("c_proj", nn.Linear(d_model * 4, d_model))
+            ]))
+        
         self.ln_2 = LayerNorm(d_model)
         self.attn_mask = attn_mask
         self.n_head = n_head
         self.d_model=d_model
+        
         self.shift = shift
         self.shift_type = shift_type
 
@@ -93,62 +108,45 @@ class ResidualAttentionBlock(nn.Module):
             
             elif self.shift_type == 'tsm':
                 self.shift_op = TemporalShift(8)
-        
-        # self.rel_pos_embed = rel_pos_embed
-        # self.rel_pos_zero_init = rel_pos_zero_init
-        # if self.rel_pos_embed:
-        #     # initialize relative positional embeddings
-        #     assert input_size[1] == input_size[2]
 
-        #     size = input_size[1]
-        #     head_dim = d_model // n_head
-        #     stride_q=(1, 1, 1)
-        #     stride_kv=(1, 1, 1)
-        #     rel_dim = 2 * max(size // stride_q[1], size // stride_kv[1]) - 1
-        #     self.rel_pos_h = nn.Parameter(torch.zeros(rel_dim, head_dim))
-        #     self.rel_pos_w = nn.Parameter(torch.zeros(rel_dim, head_dim))
-        #     self.rel_pos_t = nn.Parameter(
-        #         torch.zeros(2 * input_size[0] - 1, head_dim))
-        
+    def attention(self, x: torch.Tensor):
+        self.attn_mask = self.attn_mask.to(dtype=x.dtype, device=x.device) if self.attn_mask is not None else None
+        return self.attn(x, x, x, need_weights=False, attn_mask=self.attn_mask)[0]
 
-    # def attention(self, x: torch.Tensor):
-    #     self.attn_mask = self.attn_mask.to(dtype=x.dtype, device=x.device) if self.attn_mask is not None else None
-    #     return self.attn(x, x, x, need_weights=False, attn_mask=self.attn_mask)[0]
-
-    # def cross_attention(self, q: torch.Tensor, k: torch.Tensor, v: torch.Tensor):
-    #     self.attn_mask = self.attn_mask.to(dtype=q.dtype, device=q.device) if self.attn_mask is not None else None
-    #     return self.attn(q, k, v, need_weights=False, attn_mask=self.attn_mask)[0]
+    def cross_attention(self, q: torch.Tensor, k: torch.Tensor, v: torch.Tensor):
+        self.attn_mask = self.attn_mask.to(dtype=q.dtype, device=q.device) if self.attn_mask is not None else None
+        return self.attn(q, k, v, need_weights=False, attn_mask=self.attn_mask)[0]
     
-    def attention(
-        self, x: torch.Tensor , y: torch.Tensor
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    # def attention(
+    #     self, x: torch.Tensor , y: torch.Tensor
+    # ) -> Tuple[torch.Tensor, torch.Tensor]:
         
-        # input: HW+2, BT, D
-        q = (x @ self.attn.in_proj_weight[:self.d_model].T
-             ) + self.attn.in_proj_bias[:self.d_model]
+    #     # input: HW+2, BT, D
+    #     q = (x @ self.attn.in_proj_weight[:self.d_model].T
+    #          ) + self.attn.in_proj_bias[:self.d_model]
 
-        k = (y @ self.attn.in_proj_weight[self.d_model:-self.d_model].T
-             ) + self.attn.in_proj_bias[self.d_model:-self.d_model]
-        v = (y @ self.attn.in_proj_weight[-self.d_model:].T
-             ) + self.attn.in_proj_bias[-self.d_model:]
-        Tx, Ty, N = q.size(0), k.size(0), q.size(1)
-        q = q.view(Tx, N, self.attn.num_heads,
-                   self.attn.head_dim).permute(1, 2, 0, 3) # N num_heads Tx D_head
-        k = k.view(Ty, N, self.attn.num_heads,
-                   self.attn.head_dim).permute(1, 2, 0, 3) # N num_heads Ty D_head
-        v = v.view(Ty, N, self.attn.num_heads,
-                   self.attn.head_dim).permute(1, 2, 0, 3)
+    #     k = (y @ self.attn.in_proj_weight[self.d_model:-self.d_model].T
+    #          ) + self.attn.in_proj_bias[self.d_model:-self.d_model]
+    #     v = (y @ self.attn.in_proj_weight[-self.d_model:].T
+    #          ) + self.attn.in_proj_bias[-self.d_model:]
+    #     Tx, Ty, N = q.size(0), k.size(0), q.size(1)
+    #     q = q.view(Tx, N, self.attn.num_heads,
+    #                self.attn.head_dim).permute(1, 2, 0, 3) # N num_heads Tx D_head
+    #     k = k.view(Ty, N, self.attn.num_heads,
+    #                self.attn.head_dim).permute(1, 2, 0, 3) # N num_heads Ty D_head
+    #     v = v.view(Ty, N, self.attn.num_heads,
+    #                self.attn.head_dim).permute(1, 2, 0, 3)
         
-        aff = (q @ k.transpose(-2, -1) / (self.attn.head_dim**0.5)) # (N, num_heads, Tx, Ty)
+    #     aff = (q @ k.transpose(-2, -1) / (self.attn.head_dim**0.5)) # (N, num_heads, Tx, Ty)
         
-        aff = aff.softmax(dim=-1)
+    #     aff = aff.softmax(dim=-1)
         
         
-        out = aff @ v  # N num_heads Tx D_head
-        out = out.permute(2, 0, 1, 3).flatten(2)
-        out = self.attn.out_proj(out) # N Tx D
+    #     out = aff @ v  # N num_heads Tx D_head
+    #     out = out.permute(2, 0, 1, 3).flatten(2)
+    #     out = self.attn.out_proj(out) # N Tx D
         
-        return out 
+    #     return out 
     
     def forward(self, x: torch.Tensor, ):
         ## x shape [HW+1, BT, D]
@@ -165,7 +163,11 @@ class ResidualAttentionBlock(nn.Module):
         
         xt = rearrange(class_token, 'n (b t) d -> t (b n) d', t=self.num_frames)
         ln_xt=self.ln_1(xt)
-        xt = self.T_Adapter(self.attention(ln_xt,ln_xt))
+        
+        if self.use_flash_attn:
+            xt = self.T_Adapter(self.attn(ln_xt))
+        else:
+            xt = self.T_Adapter(self.attention(ln_xt))
         xt = rearrange(xt, 't (b n) d -> n (b t) d', n=1)
         # x = x + self.drop_path(xt)
         x= torch.cat([x[:1,:,:], xt, x[1:,:,:]], dim=0)# x shape [HW+2, BT, D]
@@ -185,12 +187,18 @@ class ResidualAttentionBlock(nn.Module):
             tmp_x = rearrange(tmp_x, 'b t h w c -> (b t) c h w')
             
             tmp_x = tmp_x.view(NT, C, -1).permute(2, 0, 1).contiguous() # P NT C
-            # tmp_x = torch.cat([xln, tmp_x], dim=0)
+            tmp_x = torch.cat([xln, tmp_x], dim=0)
             
-            x = x + self.S_Adapter(self.attention(xln,xln)) + self.drop_path(self.T_Adapter(self.attention(xln,tmp_x)))
+            if self.use_flash_attn:
+                x = x + self.S_Adapter(self.attn(x=xln,x_kv=tmp_x)) 
+            else:
+                x = x + self.S_Adapter(self.cross_attention(xln,tmp_x)) 
             
         else:
-            x = x + self.drop_path(self.S_Adapter(self.attention(self.ln_1(x),self.ln_1(x))))
+            if self.use_flash_attn:
+                x = x + self.drop_path(self.S_Adapter(self.attn(self.ln_1(x))))
+            else:
+                x = x + self.drop_path(self.S_Adapter(self.attention(self.ln_1(x))))
         
         ## joint adaptation
         x= torch.cat([x[:1,:,:], x[2:,:,:]], dim=0) # [HW+2, BT, D]
@@ -301,7 +309,7 @@ class TemporalShift(nn.Module):
 
 class Transformer(nn.Module):
     def __init__(self, num_frames, width: int, layers: int, heads: int, attn_mask: torch.Tensor = None, 
-                scale=1., drop_path=0.1, shift_type: str = 'psm'):
+                scale=1., drop_path=0.1, shift_type: str = 'psm', use_flash_attn: bool = False):
         super().__init__()
         self.width = width
         self.layers = layers
@@ -319,20 +327,24 @@ class Transformer(nn.Module):
                     dpr[i],
                     shift= False,
                     shift_type='psm',
-                    
+                    use_flash_attn=use_flash_attn
                 )
                 for i in range(layers)
             ]
         )
         
     def forward(self, x: torch.Tensor):
-        return self.resblocks(x)
+        for r in self.resblocks:
+            
+            x = checkpoint(r, x)
+        # return self.resblocks(x)
+        return x
 
 
 @MODELS.register_module()
 class ViT_CLIP_TPS(nn.Module):
     ## ViT definition in CLIP image encoder
-    def __init__(self, input_resolution: int, num_frames: int, patch_size: int, width: int, layers: int, heads: int, drop_path_rate, adapter_scale=0.5, pretrained=None):
+    def __init__(self, input_resolution: int, num_frames: int, patch_size: int, width: int, layers: int, heads: int, drop_path_rate, adapter_scale=0.5, pretrained=None, use_flash_attn: bool = False ):
         super().__init__()
         self.input_resolution = input_resolution
         self.pretrained = pretrained
@@ -347,11 +359,11 @@ class ViT_CLIP_TPS(nn.Module):
         self.num_frames = num_frames
         self.temporal_embedding = nn.Parameter(torch.zeros(1, num_frames, width))
 
-        self.transformer = Transformer(num_frames, width, layers, heads, scale=adapter_scale, drop_path=drop_path_rate)
+        self.transformer = Transformer(num_frames, width, layers, heads, scale=adapter_scale, drop_path=drop_path_rate, use_flash_attn=use_flash_attn)
 
         self.ln_post = LayerNorm(width)
         
-        
+        self.use_flash_attn = use_flash_attn
 
     def init_weights(self, pretrained=None):
         def _init_weights(m):

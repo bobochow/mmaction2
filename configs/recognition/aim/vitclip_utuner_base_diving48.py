@@ -9,15 +9,15 @@ model = dict(
 
 # dataset settings
 dataset_type = 'VideoDataset'
-data_root = 'data/diving48'
-data_root_val = 'data/diving48'
+data_root = 'data/diving48/videos'
+data_root_val = 'data/diving48/videos'
 ann_file_train = 'data/diving48/diving48_train_list_videos.txt'
 ann_file_val = 'data/diving48/diving48_val_list_videos.txt'
 ann_file_test = 'data/diving48/diving48_val_list_videos.txt'
 
 total_epochs = 50
 num_frames=32
-work_dir = './work_dirs/vitclip_utuner_base_diving48'
+# work_dir = './work_dirs/vitclip_utuner_base_diving48'
 train_pipeline = [
     dict(type='DecordInit'),
     dict(type='UniformSample', clip_len=num_frames, num_clips=1),
@@ -56,8 +56,10 @@ test_pipeline = [
     dict(type='PackActionInputs')
 ]
 
+batch_size=1
+
 train_dataloader = dict(
-    batch_size=10,
+    batch_size=batch_size,
     num_workers=2,
     persistent_workers=True,
     sampler=dict(type='DefaultSampler', shuffle=True),
@@ -67,7 +69,7 @@ train_dataloader = dict(
         data_prefix=dict(video=data_root),
         pipeline=train_pipeline))
 val_dataloader = dict(
-    batch_size=10,
+    batch_size=batch_size,
     num_workers=2,
     persistent_workers=True,
     sampler=dict(type='DefaultSampler', shuffle=False),
@@ -99,7 +101,7 @@ test_cfg = dict(type='TestLoop')
 
 # optimizer
 optim_wrapper = dict(
-    type='ApexOptimWrapper',
+    type='AmpOptimWrapper',
     optimizer=dict(
         type='AdamW', lr=3e-4, betas=(0.9, 0.999), weight_decay=0.05),
     paramwise_cfg=dict(
@@ -144,16 +146,23 @@ default_hooks = dict(
 #                     patience=5)]
 
 
+project='vitclip_diving48_amp'
+name='tps_all_rand_augment'
+
+work_dir = f'./work_dirs/diving48/{project}/{name}'
+
 visualizer = dict(
     type='ActionVisualizer',
     vis_backends=[
         dict(type='LocalVisBackend'),
-        dict(type='TensorboardVisBackend', save_dir=f'{work_dir}/tensorboard'),
-        dict(type='WandbVisBackend',init_kwargs=dict(project='vitclip_utuner_base_diving48', name='exp_tps_all_apex',
-                                                    resume=True)),
+        # dict(type='TensorboardVisBackend', save_dir=f'{work_dir}/tensorboard'),
+        # dict(type='WandbVisBackend',init_kwargs=dict(project=project, name=name)),
     ],
 )
 
-resume=True
-
 auto_scale_lr = dict(enable=True, base_batch_size=64)
+
+# activation_checkpointing=['backbone.transformer.resblocks.0', 'backbone.transformer.resblocks.1', 'backbone.transformer.resblocks.2',  'backbone.transformer.resblocks.3',
+#                           'backbone.transformer.resblocks.4', 'backbone.transformer.resblocks.5', 'backbone.transformer.resblocks.6',  'backbone.transformer.resblocks.7',
+#                           'backbone.transformer.resblocks.8', 'backbone.transformer.resblocks.9', 'backbone.transformer.resblocks.10', 'backbone.transformer.resblocks.11',]
+

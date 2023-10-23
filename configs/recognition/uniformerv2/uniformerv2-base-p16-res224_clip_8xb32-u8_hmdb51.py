@@ -1,44 +1,42 @@
-_base_ = [
-    '../../_base_/models/vitclip_utuner_base.py', '../../_base_/default_runtime.py'
-]
-
+_base_ = ['../../_base_/default_runtime.py']
 
 # model settings
+num_frames = 16
 model = dict(
     type='Recognizer3D',
     backbone=dict(
-        type='ViT_CLIP_TOME',
-        pretrained='openaiclip',
+        type='UniFormerV2',
         input_resolution=224,
         patch_size=16,
-        num_frames=32,
         width=768,
         layers=12,
         heads=12,
+        t_size=num_frames,
+        dw_reduction=1.5,
+        backbone_drop_path_rate=0.1,
+        temporal_downsample=False,
+        no_lmhra=False,
+        double_lmhra=False,
+        return_list=[8, 9, 10, 11],
+        n_layers=4,
+        n_dim=768,
+        n_head=12,
+        mlp_factor=4.,
         drop_path_rate=0.1,
-        adapter_scale=0.5,
-        tome_r=(4,0)),
-<<<<<<< HEAD
-        tome_r=(4,0)),
-=======
-        tome_r=(8,0)),
->>>>>>> 3189cb338d76331c77ebb96f78980b8d2bf557f8
+        mlp_dropout=[0.5, 0.5, 0.5, 0.5],
+        clip_pretrained=True,
+        pretrained='ViT-B/16'),
+    cls_head=dict(
+        type='UniFormerHead',
+        dropout_ratio=0.5,
+        num_classes=51,
+        in_channels=768,
+        average_clips='prob'),
     data_preprocessor=dict(
         type='ActionDataPreprocessor',
-        mean=[122.769, 116.74, 104.04],
-        std=[68.493, 66.63, 70.321],
-        format_shape='NCTHW'),
-    cls_head=dict(
-        type='I3DHead',
-        in_channels=768,
-        num_classes=51,
-        spatial_type='avg',
-        dropout_ratio=0.5,
-        average_clips='prob',
-        label_smooth_eps=0.02
-        ),
-    )
-
+        mean=[114.75, 114.75, 114.75],
+        std=[57.375, 57.375, 57.375],
+        format_shape='NCTHW'))
 
 # dataset settings
 dataset_type = 'VideoDataset'
@@ -48,37 +46,46 @@ ann_file_train = 'data/hmdb51/hmdb51_train_split_1_videos.txt'
 ann_file_val = 'data/hmdb51/hmdb51_val_split_1_videos.txt'
 ann_file_test = 'data/hmdb51/hmdb51_val_split_1_videos.txt'
 
-total_epochs = 30
-num_frames=32
-work_dir = './work_dirs/vitclip_tome_base_hmdb51'
+work_dir = './work_dirs/uniformerv2_base_hmdb51'
+
+file_client_args = dict(io_backend='disk')
 train_pipeline = [
-    dict(type='DecordInit'),
+    dict(type='DecordInit', **file_client_args),
     dict(type='UniformSample', clip_len=num_frames, num_clips=1),
     dict(type='DecordDecode'),
     dict(type='Resize', scale=(-1, 256)),
+    dict(
+        type='PytorchVideoWrapper',
+        op='RandAugment',
+        magnitude=7,
+        num_layers=4),
     dict(type='RandomResizedCrop'),
     dict(type='Resize', scale=(224, 224), keep_ratio=False),
     dict(type='Flip', flip_ratio=0.5),
     dict(type='FormatShape', input_format='NCTHW'),
     dict(type='PackActionInputs')
 ]
+
 val_pipeline = [
-    dict(type='DecordInit'),
-    dict(type='UniformSample', clip_len=num_frames, num_clips=1,test_mode=True),
+    dict(type='DecordInit', **file_client_args),
+    dict(
+        type='UniformSample', clip_len=num_frames, num_clips=1,
+        test_mode=True),
     dict(type='DecordDecode'),
-    dict(type='Resize', scale=(-1, 256)),
+    dict(type='Resize', scale=(-1, 224)),
     dict(type='CenterCrop', crop_size=224),
-    dict(type='Flip', flip_ratio=0),
     dict(type='FormatShape', input_format='NCTHW'),
     dict(type='PackActionInputs')
 ]
+
 test_pipeline = [
-    dict(type='DecordInit'),
-    dict(type='UniformSample', clip_len=num_frames, num_clips=1,test_mode=True),
+    dict(type='DecordInit', **file_client_args),
+    dict(
+        type='UniformSample', clip_len=num_frames, num_clips=4,
+        test_mode=True),
     dict(type='DecordDecode'),
     dict(type='Resize', scale=(-1, 224)),
     dict(type='ThreeCrop', crop_size=224),
-    dict(type='Flip', flip_ratio=0),
     dict(type='FormatShape', input_format='NCTHW'),
     dict(type='PackActionInputs')
 ]
@@ -105,8 +112,8 @@ val_dataloader = dict(
         pipeline=val_pipeline,
         test_mode=True))
 test_dataloader = dict(
-    batch_size=1,
-    num_workers=1,
+    batch_size=8,
+    num_workers=8,
     persistent_workers=True,
     sampler=dict(type='DefaultSampler', shuffle=False),
     dataset=dict(
@@ -117,58 +124,44 @@ test_dataloader = dict(
         test_mode=True))
 
 val_evaluator = dict(type='AccMetric')
-test_evaluator = val_evaluator
-
+test_evaluator = dict(type='AccMetric')
 train_cfg = dict(
-    type='EpochBasedTrainLoop', max_epochs=total_epochs, val_begin=2, val_interval=1)
+    type='EpochBasedTrainLoop', max_epochs=55, val_begin=1, val_interval=2)
 val_cfg = dict(type='ValLoop')
 test_cfg = dict(type='TestLoop')
 
-# optimizer
+base_lr = 1e-5
 optim_wrapper = dict(
-    type='ApexOptimWrapper',
     optimizer=dict(
-        type='AdamW', lr=3e-4, betas=(0.9, 0.999), weight_decay=0.05),
-    paramwise_cfg=dict(
-        class_embedding=dict(decay_mult=0.),
-        positional_embedding=dict(decay_mult=0.),
-        ln_1=dict(decay_mult=0.),
-        ln_2=dict(decay_mult=0.),
-        ln_pre=dict(decay_mult=0.),
-        ln_post=dict(decay_mult=0.),
-        ),
-    
-    )
+        type='AdamW', lr=base_lr, betas=(0.9, 0.999), weight_decay=0.05),
+    paramwise_cfg=dict(norm_decay_mult=0.0, bias_decay_mult=0.0),
+    clip_grad=dict(max_norm=20, norm_type=2))
 
-# learning policy
 param_scheduler = [
     dict(
         type='LinearLR',
         start_factor=0.1,
         by_epoch=True,
         begin=0,
-        end=2.5,
+        end=2,
         convert_to_iter_based=True),
     dict(
         type='CosineAnnealingLR',
-        T_max=total_epochs,
-        eta_min=0,
+        T_max=50,
+        eta_min_ratio=0.1,
         by_epoch=True,
-        begin=0,
-        end=total_epochs)
+        begin=2,
+        end=55,
+        convert_to_iter_based=True)
 ]
 
-# runtime settings
 default_hooks = dict(
-    checkpoint=dict(interval=2, max_keep_ckpts=1,save_best='auto'), 
-    logger=dict(interval=100)
-    )
+    checkpoint=dict(interval=2, max_keep_ckpts=1,save_best='auto'), logger=dict(interval=100))
 
 custom_hooks = [dict(type='EarlyStoppingHook',
                     monitor='acc/top1',
                     rule='greater',
-                    min_delta=0.005,
-                    patience=7)]
+                    patience=15)]
 
 
 visualizer = dict(
@@ -176,9 +169,12 @@ visualizer = dict(
     vis_backends=[
         dict(type='LocalVisBackend'),
         dict(type='TensorboardVisBackend', save_dir=f'{work_dir}/tensorboard'),
-        dict(type='WandbVisBackend',init_kwargs=dict(project='vitclip_tome_base_hmdb51', name='exp_4r0_tps_all_apex')),
+        dict(type='WandbVisBackend',init_kwargs=dict(project='uniformerv2_hmdb51', name='finetune_exp3_lmhra_32f')),
     ],
 )
 
-auto_scale_lr = dict(enable=True, base_batch_size=64)
-
+# Default setting for scaling LR automatically
+#   - `enable` means enable scaling LR automatically
+#       or not by default.
+#   - `base_batch_size` = (8 GPUs) x (8 samples per GPU).
+auto_scale_lr = dict(enable=True, base_batch_size=256)

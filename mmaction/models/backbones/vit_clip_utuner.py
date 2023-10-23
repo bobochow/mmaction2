@@ -13,6 +13,8 @@ from einops import rearrange
 
 from mmaction.registry import MODELS
 
+# from torch.utils.checkpoint import checkpoint
+
 # from ..builder import BACKBONES
 
 logger = MMLogger.get_current_instance()
@@ -76,6 +78,7 @@ class ResidualAttentionBlock(nn.Module):
                 t_rel_pos_embed: bool = True,
                 rel_pos_zero_init: bool = False,
                 input_size: Optional[Tuple[int]] = None,
+                # use_flash_attn: bool = False,
                 ):
         super().__init__()
         self.num_tadapter = num_tadapter
@@ -90,7 +93,6 @@ class ResidualAttentionBlock(nn.Module):
         self.attn_mask = attn_mask
         self.n_head = n_head
 
-
         self.d_model=d_model
         self.shift = shift
         self.shift_type = shift_type
@@ -104,7 +106,6 @@ class ResidualAttentionBlock(nn.Module):
 
         if num_tadapter == 2:
             self.T_Adapter_in = Adapter(d_model)
-
 
         self.num_frames = num_frames
         self.drop_path = DropPath(drop_path) if drop_path > 0. else nn.Identity()
@@ -163,7 +164,6 @@ class ResidualAttentionBlock(nn.Module):
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         
         # input: HW+2, BT, D
-        
         q = (x @ self.attn.in_proj_weight[:self.d_model].T
              ) + self.attn.in_proj_bias[:self.d_model]
 
@@ -322,6 +322,7 @@ class Transformer(nn.Module):
         super().__init__()
         self.width = width
         self.layers = layers
+        self.grad_checkpointing=False
 
         dpr = [x.item() for x in torch.linspace(0, drop_path, self.layers)]
         # self.resblocks = nn.Sequential(*[ResidualAttentionBlock(width, heads, attn_mask, scale, num_tadapter, num_frames, dpr[i], 
@@ -345,9 +346,12 @@ class Transformer(nn.Module):
                 for i in range(layers)
             ]
         )
-        
+
     def forward(self, x: torch.Tensor):
+        
+        x = self.resblocks(x)
         return self.resblocks(x)
+        
 
 
 @MODELS.register_module()
