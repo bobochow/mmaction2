@@ -1,44 +1,14 @@
 _base_ = [
-    '../../_base_/models/vitclip_utuner_base.py', '../../_base_/default_runtime.py'
+    '../../_base_/models/swin_tiny_2D_tps.py', '../../_base_/default_runtime.py'
 ]
 
-
-# model settings
 model = dict(
-    type='Recognizer3D',
     backbone=dict(
-        type='ViT_CLIP_TOME',
-        pretrained='openaiclip',
-        input_resolution=224,
-        patch_size=16,
-        num_frames=32,
-        width=768,
-        layers=12,
-        heads=12,
+        arch='base',
         drop_path_rate=0.1,
-        adapter_scale=0.5,
-        tome_r=(4,0)),
-<<<<<<< HEAD
-        tome_r=(4,0)),
-=======
-        tome_r=(8,0)),
->>>>>>> 3189cb338d76331c77ebb96f78980b8d2bf557f8
-    data_preprocessor=dict(
-        type='ActionDataPreprocessor',
-        mean=[122.769, 116.74, 104.04],
-        std=[68.493, 66.63, 70.321],
-        format_shape='NCTHW'),
-    cls_head=dict(
-        type='I3DHead',
-        in_channels=768,
-        num_classes=51,
-        spatial_type='avg',
-        dropout_ratio=0.5,
-        average_clips='prob',
-        label_smooth_eps=0.02
-        ),
-    )
-
+        pretrained='checkpoint/swin_base_patch4_window7_224_22k.pth'
+    ),
+    cls_head=dict(in_channels=1024,num_classes=51,label_smooth_eps=0.02))
 
 # dataset settings
 dataset_type = 'VideoDataset'
@@ -48,12 +18,12 @@ ann_file_train = 'data/hmdb51/hmdb51_train_split_1_videos.txt'
 ann_file_val = 'data/hmdb51/hmdb51_val_split_1_videos.txt'
 ann_file_test = 'data/hmdb51/hmdb51_val_split_1_videos.txt'
 
-total_epochs = 30
-num_frames=32
-work_dir = './work_dirs/vitclip_tome_base_hmdb51'
+work_dir = './work_dirs/swin_base_tps_hmdb51_22k'
+
+file_client_args = dict(io_backend='disk')
 train_pipeline = [
-    dict(type='DecordInit'),
-    dict(type='UniformSample', clip_len=num_frames, num_clips=1),
+    dict(type='DecordInit', **file_client_args),
+    dict(type='SampleFrames', clip_len=32, frame_interval=2, num_clips=1),
     dict(type='DecordDecode'),
     dict(type='Resize', scale=(-1, 256)),
     dict(type='RandomResizedCrop'),
@@ -63,28 +33,36 @@ train_pipeline = [
     dict(type='PackActionInputs')
 ]
 val_pipeline = [
-    dict(type='DecordInit'),
-    dict(type='UniformSample', clip_len=num_frames, num_clips=1,test_mode=True),
+    dict(type='DecordInit', **file_client_args),
+    dict(
+        type='SampleFrames',
+        clip_len=32,
+        frame_interval=2,
+        num_clips=1,
+        test_mode=True),
     dict(type='DecordDecode'),
     dict(type='Resize', scale=(-1, 256)),
     dict(type='CenterCrop', crop_size=224),
-    dict(type='Flip', flip_ratio=0),
     dict(type='FormatShape', input_format='NCTHW'),
     dict(type='PackActionInputs')
 ]
 test_pipeline = [
-    dict(type='DecordInit'),
-    dict(type='UniformSample', clip_len=num_frames, num_clips=1,test_mode=True),
+    dict(type='DecordInit', **file_client_args),
+    dict(
+        type='SampleFrames',
+        clip_len=32,
+        frame_interval=2,
+        num_clips=4,
+        test_mode=True),
     dict(type='DecordDecode'),
     dict(type='Resize', scale=(-1, 224)),
     dict(type='ThreeCrop', crop_size=224),
-    dict(type='Flip', flip_ratio=0),
     dict(type='FormatShape', input_format='NCTHW'),
     dict(type='PackActionInputs')
 ]
 
 train_dataloader = dict(
-    batch_size=8,
+    batch_size=12,
     num_workers=8,
     persistent_workers=True,
     sampler=dict(type='DefaultSampler', shuffle=True),
@@ -106,7 +84,7 @@ val_dataloader = dict(
         test_mode=True))
 test_dataloader = dict(
     batch_size=1,
-    num_workers=1,
+    num_workers=8,
     persistent_workers=True,
     sampler=dict(type='DefaultSampler', shuffle=False),
     dataset=dict(
@@ -119,28 +97,24 @@ test_dataloader = dict(
 val_evaluator = dict(type='AccMetric')
 test_evaluator = val_evaluator
 
+total_epochs = 30
+
 train_cfg = dict(
-    type='EpochBasedTrainLoop', max_epochs=total_epochs, val_begin=2, val_interval=1)
+    type='EpochBasedTrainLoop', max_epochs=total_epochs, val_begin=1, val_interval=2)
 val_cfg = dict(type='ValLoop')
 test_cfg = dict(type='TestLoop')
 
-# optimizer
 optim_wrapper = dict(
-    type='ApexOptimWrapper',
+    type='AmpOptimWrapper',
     optimizer=dict(
-        type='AdamW', lr=3e-4, betas=(0.9, 0.999), weight_decay=0.05),
+        type='AdamW', lr=1e-3, betas=(0.9, 0.999), weight_decay=0.02),
+    constructor='SwinOptimWrapperConstructor',
     paramwise_cfg=dict(
-        class_embedding=dict(decay_mult=0.),
-        positional_embedding=dict(decay_mult=0.),
-        ln_1=dict(decay_mult=0.),
-        ln_2=dict(decay_mult=0.),
-        ln_pre=dict(decay_mult=0.),
-        ln_post=dict(decay_mult=0.),
-        ),
-    
-    )
+        absolute_pos_embed=dict(decay_mult=0.),
+        relative_position_bias_table=dict(decay_mult=0.),
+        norm=dict(decay_mult=0.),
+        backbone=dict(lr_mult=0.1)))
 
-# learning policy
 param_scheduler = [
     dict(
         type='LinearLR',
@@ -158,27 +132,28 @@ param_scheduler = [
         end=total_epochs)
 ]
 
-# runtime settings
 default_hooks = dict(
     checkpoint=dict(interval=2, max_keep_ckpts=1,save_best='auto'), 
-    logger=dict(interval=100)
+    logger=dict(interval=100),
+    
     )
 
 custom_hooks = [dict(type='EarlyStoppingHook',
                     monitor='acc/top1',
                     rule='greater',
-                    min_delta=0.005,
-                    patience=7)]
-
+                    patience=10)]
 
 visualizer = dict(
     type='ActionVisualizer',
     vis_backends=[
         dict(type='LocalVisBackend'),
         dict(type='TensorboardVisBackend', save_dir=f'{work_dir}/tensorboard'),
-        dict(type='WandbVisBackend',init_kwargs=dict(project='vitclip_tome_base_hmdb51', name='exp_4r0_tps_all_apex')),
+        dict(type='WandbVisBackend',init_kwargs=dict(project='swin_base_tps_hmdb51', name='exp_22k')),
     ],
 )
 
+# Default setting for scaling LR automatically
+#   - `enable` means enable scaling LR automatically
+#       or not by default.
+#   - `base_batch_size` = (8 GPUs) x (8 samples per GPU).
 auto_scale_lr = dict(enable=True, base_batch_size=64)
-

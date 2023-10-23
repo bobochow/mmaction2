@@ -163,11 +163,10 @@ class ResidualAttentionBlock(nn.Module):
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         
         # input: HW+2, BT, D
-        
         q = (x @ self.attn.in_proj_weight[:self.d_model].T
              ) + self.attn.in_proj_bias[:self.d_model]
 
-        k = (x @ self.attn.in_proj_weight[self.d_model:-self.d_model].T
+        k = (y @ self.attn.in_proj_weight[self.d_model:-self.d_model].T
              ) + self.attn.in_proj_bias[self.d_model:-self.d_model]
         v = (x @ self.attn.in_proj_weight[-self.d_model:].T
              ) + self.attn.in_proj_bias[-self.d_model:]
