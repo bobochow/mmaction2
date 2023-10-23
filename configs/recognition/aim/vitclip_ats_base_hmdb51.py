@@ -4,7 +4,7 @@ _base_ = [
 
 # model settings
 model = dict(
-    backbone=dict(drop_path_rate=0.2, adapter_scale=0.5, num_frames=32),
+    backbone=dict(drop_path_rate=0.2, adapter_scale=0.5, num_frames=32,t_ats_fraction=3,s_ats_fraction=0.5),
     cls_head=dict(num_classes=51,label_smooth_eps=0.02),
 )
 
@@ -145,7 +145,7 @@ visualizer = dict(
     vis_backends=[
         dict(type='LocalVisBackend'),
         dict(type='TensorboardVisBackend', save_dir=f'{work_dir}/tensorboard'),
-        dict(type='WandbVisBackend',init_kwargs=dict(project='vitclip_ats_base_hmdb51', name='exp_6_apex')),
+        dict(type='WandbVisBackend',init_kwargs=dict(project='vitclip_ats_base_hmdb51', name='exp_all_3x05')),
     ],
 )
 

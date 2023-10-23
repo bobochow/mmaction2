@@ -510,7 +510,6 @@ class ViT_CLIP_UTUNER(nn.Module):
         x = x.unsqueeze(-1).unsqueeze(-1)  # BDTHW for I3D head
 
         return x
-
     def train(self, mode: bool = True) -> None:
         """Convert the model into training mode while keep layers frozen."""
         super(ViT_CLIP_UTUNER, self).train(mode)
