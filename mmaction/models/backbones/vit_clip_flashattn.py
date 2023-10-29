@@ -342,7 +342,7 @@ class Transformer(nn.Module):
 
 
 @MODELS.register_module()
-class ViT_CLIP_TPS(nn.Module):
+class ViT_CLIP_FLASH(nn.Module):
     ## ViT definition in CLIP image encoder
     def __init__(self, input_resolution: int, num_frames: int, patch_size: int, width: int, layers: int, heads: int, drop_path_rate, adapter_scale=0.5, pretrained=None, use_flash_attn: bool = False ):
         super().__init__()
@@ -480,7 +480,7 @@ class ViT_CLIP_TPS(nn.Module):
 
     def train(self, mode: bool = True) -> None:
         """Convert the model into training mode while keep layers frozen."""
-        super(ViT_CLIP_TPS, self).train(mode)
+        super(ViT_CLIP_FLASH, self).train(mode)
         
 
 if __name__ == '__main__':
@@ -488,7 +488,7 @@ if __name__ == '__main__':
     from mmengine.analysis import get_model_complexity_info
 
     backbone=dict(
-        type='ViT_CLIP_TPS',
+        type='ViT_CLIP_FLASH',
         pretrained='openaiclip',
         input_resolution=224,
         patch_size=16,
@@ -499,7 +499,7 @@ if __name__ == '__main__':
         drop_path_rate=0.1),
 
     input_shape = (3,32,224,224)
-    model = ViT_CLIP_TPS(pretrained='openaiclip',
+    model = ViT_CLIP_FLASH(pretrained='openaiclip',
                         input_resolution=224,
                         adapter_scale=0.5,
                         patch_size=16,
