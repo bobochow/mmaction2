@@ -3,10 +3,10 @@ _base_ = [
 ]
 
 # load_from='work_dirs/vitclip_tps_utuner_k400/best_acc_top1_epoch_5.pth'
-
+num_frames=8
 # model settings
 model = dict(
-    backbone=dict(type='ViT_CLIP_FLASH',drop_path_rate=0.2, adapter_scale=0.5, num_frames=32,use_flash_attn=True),
+    backbone=dict(type='ViT_CLIP_FLASH',drop_path_rate=0.2, adapter_scale=0.5, num_frames=num_frames,use_flash_attn=True),
     cls_head=dict(num_classes=51,label_smooth_eps=0.02),
 )
 
@@ -32,7 +32,7 @@ ann_file_test = 'data/hmdb51/hmdb51_val_split_1_videos.txt'
 file_client_args = dict(io_backend='disk')
 
 total_epochs = 30
-num_frames=32
+
 
 train_pipeline = [
     
@@ -79,7 +79,7 @@ test_pipeline = [
 ]
 
 
-batch_size=32
+batch_size=1
 train_dataloader = dict(
     batch_size=batch_size,
     num_workers=2,
@@ -169,6 +169,7 @@ default_hooks = dict(
 #                     min_delta=0.001,
 #                     patience=5)]
 
+find_unused_parameters = True
 
 project='vitclip_hmdb51_amp'
 name='baseline_rand_augment_flash_check'
@@ -179,13 +180,13 @@ visualizer = dict(
     type='ActionVisualizer',
     vis_backends=[
         dict(type='LocalVisBackend'),
-        dict(type='TensorboardVisBackend', save_dir=f'{work_dir}/tensorboard'),
-        dict(type='WandbVisBackend',init_kwargs=dict(project=project, name=name)),
+        # dict(type='TensorboardVisBackend', save_dir=f'{work_dir}/tensorboard'),
+        # dict(type='WandbVisBackend',init_kwargs=dict(project=project, name=name)),
     ],
 )
 
 auto_scale_lr = dict(enable=True, base_batch_size=64)
 
-activation_checkpointing=['backbone.transformer.resblocks.0', 'backbone.transformer.resblocks.1', 'backbone.transformer.resblocks.2',  'backbone.transformer.resblocks.3',
-                          'backbone.transformer.resblocks.4', 'backbone.transformer.resblocks.5', 'backbone.transformer.resblocks.6',  'backbone.transformer.resblocks.7',
-                          'backbone.transformer.resblocks.8', 'backbone.transformer.resblocks.9', 'backbone.transformer.resblocks.10', 'backbone.transformer.resblocks.11',]
+# activation_checkpointing=['backbone.transformer.resblocks.0', 'backbone.transformer.resblocks.1', 'backbone.transformer.resblocks.2',  'backbone.transformer.resblocks.3',
+#                           'backbone.transformer.resblocks.4', 'backbone.transformer.resblocks.5', 'backbone.transformer.resblocks.6',  'backbone.transformer.resblocks.7',
+#                           'backbone.transformer.resblocks.8', 'backbone.transformer.resblocks.9', 'backbone.transformer.resblocks.10', 'backbone.transformer.resblocks.11',]

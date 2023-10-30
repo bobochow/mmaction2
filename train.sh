@@ -10,7 +10,7 @@ export CUDA_VISIBLE_DEVICES=2
 
 # python tools/train.py configs/recognition/aim/vitclip_utuner_base_k400.py
 
-python tools/train.py configs/recognition/aim/vitclip_utuner_base_diving48.py
+# python tools/train.py configs/recognition/aim/vitclip_utuner_base_diving48.py
 
 # python tools/train.py configs/recognition/aim/vitclip_zeroI2V_base_diving48.py
 
@@ -33,3 +33,6 @@ python tools/train.py configs/recognition/aim/vitclip_utuner_base_diving48.py
 #     # 如果第一个脚本失败，可以在此处添加处理失败情况的代码
 #     echo "第一个脚本运行失败"
 # fi
+
+# PORT=29666 bash tools/dist_train.sh configs/recognition/aim/vitclip_flash_base_hmdb51.py 1 
+python tools/train.py configs/recognition/aim/vitclip_flash_base_hmdb51.py
