@@ -21,6 +21,92 @@ from torch.utils.checkpoint import checkpoint
 
 logger = MMLogger.get_current_instance()
 
+# util functions to convert OpenCLIP-style model keys to ViT-style
+def remap_keys_from_open_clip_to_vit(
+    clip_state_dict,
+    visual_transformer_layers=12,
+    textual_transformer_layers=12,
+    context_length=77,
+    vocab_size=49408,
+    use_fast_conv1=False,
+    use_flash_attn=False,
+):
+    if 'state_dict' in clip_state_dict:
+        clip_state_dict = clip_state_dict['state_dict']
+    if list(clip_state_dict.keys())[0].startswith('module.'):
+        clip_state_dict = OrderedDict({
+            k.replace('module.', ''): v for k, v in clip_state_dict.items()
+        })
+    remapped_state_dict = OrderedDict()
+    key_mapping = {
+        "logit_scale": "logit_scale",
+        "visual.proj": "visual.image_projection",
+        "positional_embedding": "textual.positional_embedding",
+        "text_projection": "textual.text_projection",
+        "token_embedding.weight": "textual.token_embedding.weight",
+        "ln_final.weight": "textual.ln_final.weight",
+        "ln_final.bias": "textual.ln_final.bias"
+    }
+
+    for layer in range(visual_transformer_layers):
+        if use_flash_attn:
+            for src_name, tgt_name in {
+                'attn.in_proj_weight': 'attn.Wqkv.weight', 'attn.in_proj_bias': 'attn.Wqkv.bias',
+                'attn.out_proj.weight': 'attn.out_proj.weight', 'attn.out_proj.bias': 'attn.out_proj.bias',
+                'mlp.c_fc.weight': 'mlp.fc1.weight', 'mlp.c_fc.bias': 'mlp.fc1.bias',
+                'mlp.c_proj.weight': 'mlp.fc2.weight', 'mlp.c_proj.bias': 'mlp.fc2.bias',
+            }.items():
+                key_mapping[f"visual.transformer.resblocks.{layer}.{src_name}"] = f"visual.transformer.resblocks.{layer}.{tgt_name}"
+
+
+    for layer in range(textual_transformer_layers):
+        for name in [
+            'attn.in_proj_weight', 'attn.in_proj_bias', 'attn.out_proj.weight', 'attn.out_proj.bias',
+            'ln_1.weight', 'ln_1.bias', 'ln_2.weight', 'ln_2.bias',
+             'mlp.c_fc.weight', 'mlp.c_fc.bias', 'mlp.c_proj.weight', 'mlp.c_proj.bias',
+        ]:
+            key_mapping[f"transformer.resblocks.{layer}.{name}"] = f"textual.transformer.resblocks.{layer}.{name}"
+
+    for key in clip_state_dict:
+        if key in ["visual.proj", "text_projection", "logit_scale"]:
+            continue
+        if use_fast_conv1 and key == 'visual.conv1.weight':
+            remapped_state_dict['visual.conv1.weight'] = clip_state_dict[key].flatten(1)
+            # assert mean is not None and std is not None
+            # W_2 = clip_state_dict[key].flatten(1)
+            # std = torch.tensor(std).float()
+            # std = std.repeat_interleave(clip_state_dict[key].shape[-1] * clip_state_dict[key].shape[-2])
+            # W_1 = torch.diag(1 / std)
+            # W_fused = W_2 @ W_1
+            # mean = torch.tensor(mean).float().repeat_interleave(clip_state_dict[key].shape[-1] * clip_state_dict[key].shape[-2])
+            # b_1 = mean / std
+            # b_fused = W_2 @ (-b_1)
+            # remapped_state_dict['visual.conv1.weight'] = W_fused
+            # remapped_state_dict['visual.conv1.bias'] = b_fused
+        elif key not in key_mapping:
+            remapped_state_dict[key] = clip_state_dict[key]
+        else:
+            if key == 'positional_embedding':
+                old_context_length, dim = clip_state_dict[key].shape
+                old_dtype = clip_state_dict[key].dtype
+                if context_length <= old_context_length:
+                    remapped_state_dict[key_mapping[key]] = clip_state_dict[key][:context_length, :]
+                else:
+                    remapped_state_dict[key_mapping[key]] = torch.cat(
+                        (clip_state_dict[key], torch.zeros((context_length - old_context_length, dim), dtype=old_dtype)), dim=0
+                    )
+            elif key == 'token_embedding.weight':
+                old_vocab_size, dim = clip_state_dict[key].shape
+                old_dtype = clip_state_dict[key].dtype
+                assert vocab_size >= old_vocab_size
+                remapped_state_dict[key_mapping[key]] = torch.cat(
+                    (clip_state_dict[key], torch.zeros((vocab_size - old_vocab_size, dim), dtype=old_dtype)), dim=0
+                )
+            else:
+                remapped_state_dict[key_mapping[key]] = clip_state_dict[key]
+
+    return remapped_state_dict
+
 class Adapter(nn.Module):
     def __init__(self, D_features, mlp_ratio=0.25, act_layer=nn.GELU, skip_connect=True):
         super().__init__()
@@ -386,9 +472,17 @@ class ViT_CLIP_FLASH(nn.Module):
                 clip_model, preprocess = clip.load("ViT-B/16", device="cpu")
             else:
                 clip_model, preprocess = clip.load("ViT-L/14", device="cpu")
-            pretrain_dict = clip_model.visual.state_dict()
+            
+            remapped_state_dict = remap_keys_from_open_clip_to_vit(
+                clip_model.state_dict(),
+                use_flash_attn=use_flash_attn,
+            )
+            
+            pretrain_dict = remapped_state_dict.visual.state_dict()
             del clip_model
+            del remapped_state_dict
             del pretrain_dict['proj']
+            
             msg = self.load_state_dict(pretrain_dict, strict=False)
             logger.info('Missing keys: {}'.format(msg.missing_keys))
             logger.info('Unexpected keys: {}'.format(msg.unexpected_keys))
