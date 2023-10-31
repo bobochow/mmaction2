@@ -1927,3 +1927,106 @@ class LoadProposals(BaseTransform):
                     f'proposal_ext={self.proposal_ext}, '
                     f'feature_ext={self.feature_ext})')
         return repr_str
+
+
+@TRANSFORMS.register_module()
+class FusedDecordInit(BaseTransform):
+    """Using RandomResizeCrop-FusedDecord to initialize the video_reader.
+
+    FusedDecord: https://github.com/zhaoyue-zephyrus/decord-dev.git
+
+    Required Keys:
+
+        - filename
+
+    Added Keys:
+
+        - video_reader
+        - total_frames
+        - fps
+
+    Args:
+        io_backend (str): io backend where frames are store.
+            Defaults to ``'disk'``.
+        num_threads (int): Number of thread to decode the video. Defaults to 1.
+        kwargs (dict): Args for file client.
+    """
+
+    def __init__(self,
+                io_backend: str = 'disk',
+                num_threads: int = 1,
+                fast_rrc=False, rrc_params=(224, (0.08, 1.0)),
+                fast_msc=False, msc_params=(224,),
+                fast_cc=False, cc_params=(224,),
+                hflip_prob=0., vflip_prob=0.,
+                 **kwargs) -> None:
+        self.io_backend = io_backend
+        self.num_threads = num_threads
+        self.kwargs = kwargs
+        self.file_client = None
+        
+        if fast_rrc:
+            self.width, self.height = rrc_params[0], rrc_params[0]
+        elif fast_msc:
+            self.width, self.height = msc_params[0], msc_params[0]
+        elif fast_cc:
+            self.width, self.height = cc_params[0], cc_params[0]
+        else:
+            self.width, self.height = -1, -1
+        self.hflip_prob=hflip_prob
+        self.vflip_prob=vflip_prob
+        self.fast_rrc=fast_rrc
+        self.fast_msc=fast_msc
+        self.fast_cc=fast_cc
+        self.rrc_params=rrc_params
+        self.msc_params=msc_params
+        self.cc_params=cc_params
+        
+
+    def _get_video_reader(self, filename: str) -> object:
+        if osp.splitext(filename)[0] == filename:
+            filename = filename + '.mp4'
+        try:
+            import decord
+        except ImportError:
+            raise ImportError(
+                'Please run "pip install decord" to install Decord first.')
+
+        if self.file_client is None:
+            self.file_client = FileClient(self.io_backend, **self.kwargs)
+        file_obj = io.BytesIO(self.file_client.get(filename))
+        # container = decord.VideoReader(file_obj, num_threads=self.num_threads)
+        if self.fast_rrc or self.fast_msc or self.fast_cc:
+            container = decord.VideoReader(
+                    file_obj, num_threads=self.num_threads,
+                    width=self.width, height=self.height,
+                    use_rrc=self.fast_rrc, scale_min=self.rrc_params[1][0], scale_max=self.rrc_params[1][1],
+                    use_msc=self.fast_msc,
+                    use_centercrop=self.fast_cc,
+                    hflip_prob=self.hflip_prob, vflip_prob=self.vflip_prob,
+                )
+        else:
+            container = decord.VideoReader(file_obj, num_threads=self.num_threads)
+        return container
+
+    def transform(self, results: Dict) -> Dict:
+        """Perform the Decord initialization.
+
+        Args:
+            results (dict): The result dict.
+
+        Returns:
+            dict: The result dict.
+        """
+        container = self._get_video_reader(results['filename'])
+        results['total_frames'] = len(container)
+
+        results['video_reader'] = container
+        results['avg_fps'] = container.get_avg_fps()
+        return results
+
+    def __repr__(self) -> str:
+        repr_str = (f'{self.__class__.__name__}('
+                    f'io_backend={self.io_backend}, '
+                    f'num_threads={self.num_threads})')
+        return repr_str

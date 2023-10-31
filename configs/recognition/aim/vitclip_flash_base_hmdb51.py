@@ -3,7 +3,7 @@ _base_ = [
 ]
 
 # load_from='work_dirs/vitclip_tps_utuner_k400/best_acc_top1_epoch_5.pth'
-num_frames=8
+num_frames=32
 # model settings
 model = dict(
     backbone=dict(type='ViT_CLIP_FLASH',drop_path_rate=0.2, adapter_scale=0.5, num_frames=num_frames,use_flash_attn=True),
@@ -79,10 +79,10 @@ test_pipeline = [
 ]
 
 
-batch_size=1
+batch_size=48
 train_dataloader = dict(
     batch_size=batch_size,
-    num_workers=2,
+    num_workers=8,
     persistent_workers=True,
     sampler=dict(type='DefaultSampler', shuffle=True),
     dataset=dict(
@@ -93,7 +93,7 @@ train_dataloader = dict(
         pipeline=train_pipeline))
 val_dataloader = dict(
     batch_size=batch_size,
-    num_workers=2,
+    num_workers=8,
     persistent_workers=True,
     sampler=dict(type='DefaultSampler', shuffle=False),
     dataset=dict(
@@ -121,12 +121,14 @@ test_evaluator = val_evaluator
 
 train_cfg = dict(
     type='EpochBasedTrainLoop', max_epochs=total_epochs, val_begin=2, val_interval=1)
-val_cfg = dict(type='ValLoop')
-test_cfg = dict(type='TestLoop')
+val_cfg = dict(type='ValLoop',fp16=True)
+test_cfg = dict(type='TestLoop',fp16=True)
 
 # optimizer
 optim_wrapper = dict(
+    # type='AmpOptimWrapper',
     type='AmpOptimWrapper',
+    # dtype='float16',
     optimizer=dict(
         type='AdamW', lr=3e-4, betas=(0.9, 0.999), weight_decay=0.05),
     paramwise_cfg=dict(
@@ -172,7 +174,7 @@ default_hooks = dict(
 find_unused_parameters = True
 
 project='vitclip_hmdb51_amp'
-name='baseline_rand_augment_flash_check'
+name='baseline_rand_augment_flash_check_6x8b_30e'
 
 work_dir = f'./work_dirs/hmdb51/{project}/{name}'
 
@@ -180,8 +182,8 @@ visualizer = dict(
     type='ActionVisualizer',
     vis_backends=[
         dict(type='LocalVisBackend'),
-        # dict(type='TensorboardVisBackend', save_dir=f'{work_dir}/tensorboard'),
-        # dict(type='WandbVisBackend',init_kwargs=dict(project=project, name=name)),
+        dict(type='TensorboardVisBackend', save_dir=f'{work_dir}/tensorboard'),
+        dict(type='WandbVisBackend',init_kwargs=dict(project=project, name=name)),
     ],
 )
 
