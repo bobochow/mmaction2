@@ -152,22 +152,22 @@ class ResidualAttentionBlock(nn.Module):
         super().__init__()
 
         self.use_flash_attn = use_flash_attn
-        if self.use_flash_attn:
-            self.attn = FlashMHA(d_model, n_head, cross_attn=False, dropout=0., use_flash_attn=True)
-        else:
-            self.attn = nn.MultiheadAttention(d_model, n_head)
+        # if self.use_flash_attn:
+        self.attn = FlashMHA(d_model, n_head, cross_attn=False, dropout=0., use_flash_attn=use_flash_attn)
+        # else:
+        #     self.attn = nn.MultiheadAttention(d_model, n_head)
         
         self.ln_1 = LayerNorm(d_model)
         
-        if self.use_flash_attn:
-            mlp_width = int(d_model * 4)
-            self.mlp = FlashMlp(d_model, hidden_features=mlp_width, activation=QuickGELU())
-        else:
-            self.mlp = nn.Sequential(OrderedDict([
-                ("c_fc", nn.Linear(d_model, d_model * 4)),
-                ("gelu", QuickGELU()),
-                ("c_proj", nn.Linear(d_model * 4, d_model))
-            ]))
+        # if self.use_flash_attn:
+        mlp_width = int(d_model * 4)
+        self.mlp = FlashMlp(d_model, hidden_features=mlp_width, activation=QuickGELU())
+        # else:
+        # self.mlp = nn.Sequential(OrderedDict([
+        #     ("c_fc", nn.Linear(d_model, d_model * 4)),
+        #     ("gelu", QuickGELU()),
+        #     ("c_proj", nn.Linear(d_model * 4, d_model))
+        # ]))
         
         self.ln_2 = LayerNorm(d_model)
         self.attn_mask = attn_mask
@@ -272,10 +272,10 @@ class ResidualAttentionBlock(nn.Module):
                 x = x + self.S_Adapter(self.cross_attention(xln,tmp_x)) 
             
         else:
-            if self.use_flash_attn:
-                x = x + self.drop_path(self.S_Adapter(self.attn(self.ln_1(x))))
-            else:
-                x = x + self.drop_path(self.S_Adapter(self.attention(self.ln_1(x))))
+            # if self.use_flash_attn:
+            x = x + self.drop_path(self.S_Adapter(self.attn(self.ln_1(x))))
+            # else:
+            #     x = x + self.drop_path(self.S_Adapter(self.attention(self.ln_1(x))))
         
         ## joint adaptation
         x= torch.cat([x[:, :1, :], x[:, 2:, :]], dim=1) # [HW+2, BT, D]
@@ -411,11 +411,7 @@ class Transformer(nn.Module):
         )
         
     def forward(self, x: torch.Tensor):
-        for r in self.resblocks:
-            
-            x = checkpoint(r, x)
-        return x
-        # return self.resblocks(x)
+        return self.resblocks(x)
 
 @MODELS.register_module()
 class ViT_CLIP_FLASH(nn.Module):
@@ -483,6 +479,7 @@ class ViT_CLIP_FLASH(nn.Module):
             #     'attn.out_proj.weight': 'attn.out_proj.weight', 'attn.out_proj.bias': 'attn.out_proj.bias',
             #     'mlp.c_fc.weight': 'mlp.fc1.weight', 'mlp.c_fc.bias': 'mlp.fc1.bias',
             #     'mlp.c_proj.weight': 'mlp.fc2.weight', 'mlp.c_proj.bias': 'mlp.fc2.bias',
+            
             swaps = [('attn.in_proj_weight', 'attn.Wqkv.weight'), ('attn.in_proj_bias', 'attn.Wqkv.bias'),
                     ('attn.out_proj.weight','attn.out_proj.weight'),('attn.out_proj.bias','attn.out_proj.bias'),
                     ('mlp.c_fc.weight','mlp.fc1.weight'),('mlp.c_fc.bias','mlp.fc1.bias'),

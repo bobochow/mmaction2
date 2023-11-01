@@ -1,13 +1,13 @@
 _base_ = [
-    '../../_base_/models/vitclip_utuner_base.py', '../../_base_/default_runtime.py'
+    '../../_base_/models/vitclip_base.py', '../../_base_/default_runtime.py'
 ]
 
 # load_from='work_dirs/vitclip_tps_utuner_k400/best_acc_top1_epoch_5.pth'
 
 # model settings
 model = dict(
-    backbone=dict(drop_path_rate=0.2, adapter_scale=0.5, num_frames=32),
-    cls_head=dict(num_classes=51,label_smooth_eps=0.02),
+    backbone=dict(type='ViT_CLIP_UTUNER',drop_path_rate=0.2, adapter_scale=0.5, num_frames=32,shift=False),
+    cls_head=dict(num_classes=51,label_smooth_eps=0.1),
 )
 
 # dataset settings
@@ -80,7 +80,7 @@ test_pipeline = [
 ]
 
 
-batch_size=8
+batch_size=4
 train_dataloader = dict(
     batch_size=batch_size,
     num_workers=8,

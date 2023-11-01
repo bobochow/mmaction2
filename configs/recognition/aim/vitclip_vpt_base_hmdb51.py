@@ -1,5 +1,5 @@
 _base_ = [
-    '../../_base_/models/vitclip_utuner_base.py', '../../_base_/default_runtime.py'
+    '../../_base_/models/vitclip_base.py', '../../_base_/default_runtime.py'
 ]
 
 # load_from='work_dirs/vitclip_tps_utuner_k400/best_acc_top1_epoch_5.pth'

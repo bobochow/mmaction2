@@ -1,10 +1,10 @@
 _base_ = [
-    '../../_base_/models/vitclip_zeroI2V_base.py', '../../_base_/default_runtime.py'
+    '../../_base_/models/vitclip_base.py', '../../_base_/default_runtime.py'
 ]
 
 # model settings
 model = dict(
-    backbone=dict(drop_path_rate=0.2, adapter_scale=0.5, num_frames=32,with_t_cls_token=True,linear_adapter=False,bottleneck=128,share_adapter=False),
+    backbone=dict(type='ViT_CLIP_ZEROI2V',drop_path_rate=0.2, adapter_scale=0.5, num_frames=32,with_t_cls_token=True,linear_adapter=False,bottleneck=128,share_adapter=False),
     cls_head=dict(num_classes=51,label_smooth_eps=0.02),
 )
 

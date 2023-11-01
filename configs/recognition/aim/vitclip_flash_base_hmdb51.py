@@ -1,5 +1,5 @@
 _base_ = [
-    '../../_base_/models/vitclip_utuner_base.py', '../../_base_/default_runtime.py'
+    '../../_base_/models/vitclip_base.py', '../../_base_/default_runtime.py'
 ]
 
 # load_from='work_dirs/vitclip_tps_utuner_k400/best_acc_top1_epoch_5.pth'
@@ -7,7 +7,7 @@ num_frames=32
 # model settings
 model = dict(
     backbone=dict(type='ViT_CLIP_FLASH',drop_path_rate=0.2, adapter_scale=0.5, num_frames=num_frames,use_flash_attn=True),
-    cls_head=dict(num_classes=51,label_smooth_eps=0.02),
+    cls_head=dict(num_classes=51,label_smooth_eps=0.1),
 )
 
 # dataset settings
@@ -18,17 +18,6 @@ ann_file_train = 'data/hmdb51/hmdb51_train_split_1_videos.txt'
 ann_file_val = 'data/hmdb51/hmdb51_val_split_1_videos.txt'
 ann_file_test = 'data/hmdb51/hmdb51_val_split_1_videos.txt'
 
-# dataset_type = 'RawframeDataset'
-# data_root = 'data/hmdb51/rawframes'
-# data_root_val = 'data/hmdb51/rawframes'
-
-# # data_root = 'data/hmdb51/rawframes_ssd'
-# # data_root_val = 'data/hmdb51/rawframes_ssd'
-
-# ann_file_train = 'data/hmdb51/hmdb51_train_split_1_rawframes.txt'
-# ann_file_val = 'data/hmdb51/hmdb51_val_split_1_rawframes.txt'
-# ann_file_test = 'data/hmdb51/hmdb51_val_split_1_rawframes.txt'
-
 file_client_args = dict(io_backend='disk')
 
 total_epochs = 30
@@ -36,32 +25,36 @@ total_epochs = 30
 
 train_pipeline = [
     
-    dict(type='DecordInit'),
+    # dict(type='DecordInit'),
+    dict(type='FusedDecordInit',fast_rrc=True,rrc_params=(224, (0.08, 1.0)),hflip_prob=0.5,num_threads=8),
+    
     dict(type='UniformSample', clip_len=num_frames, num_clips=1),
     dict(type='DecordDecode'),
     # dict(type='RawFrameDecode', **file_client_args),  # Load and decode Frames pipeline, picking raw frames with given indices
-    dict(type='Resize', scale=(-1, 256)),
-    dict(type='RandomResizedCrop'),
-    dict(type='Resize', scale=(224, 224), keep_ratio=False),
-    dict(type='Flip', flip_ratio=0.5),
-    dict(
-        type='PytorchVideoWrapper',
-        op='RandAugment',
-        magnitude=7,
-        num_layers=4),
+    # dict(type='Resize', scale=(-1, 256)),
+    # dict(type='RandomResizedCrop'),
+    # dict(type='Resize', scale=(224, 224), keep_ratio=False),
+    # dict(type='Flip', flip_ratio=0.5),
+    # dict(
+    #     type='PytorchVideoWrapper',
+    #     op='RandAugment',
+    #     magnitude=7,
+    #     num_layers=4),
+    dict(type='ImgAug', transforms=[dict(type='RandAugment', n=4, m=7)]),
     dict(type='RandomErasing', erase_prob=0.25, mode='rand'),
     dict(type='FormatShape', input_format='NCTHW'),
     dict(type='PackActionInputs')
 ]
 
 val_pipeline = [
-    dict(type='DecordInit'),
+    # dict(type='DecordInit'),
+    dict(type='FusedDecordInit',fast_cc=True,cc_params=(224,)),
     dict(type='UniformSample', clip_len=num_frames, num_clips=1,test_mode=True),
     dict(type='DecordDecode'),
     # dict(type='RawFrameDecode', **file_client_args),
-    dict(type='Resize', scale=(-1, 256)),
-    dict(type='CenterCrop', crop_size=224),
-    dict(type='Flip', flip_ratio=0),
+    # dict(type='Resize', scale=(-1, 256)),
+    # dict(type='CenterCrop', crop_size=224),
+    # dict(type='Flip', flip_ratio=0),
     dict(type='FormatShape', input_format='NCTHW'),
     dict(type='PackActionInputs')
 ]
@@ -126,9 +119,7 @@ test_cfg = dict(type='TestLoop',fp16=True)
 
 # optimizer
 optim_wrapper = dict(
-    # type='AmpOptimWrapper',
     type='AmpOptimWrapper',
-    # dtype='float16',
     optimizer=dict(
         type='AdamW', lr=3e-4, betas=(0.9, 0.999), weight_decay=0.05),
     paramwise_cfg=dict(
@@ -165,16 +156,16 @@ default_hooks = dict(
     logger=dict(interval=10)
     )
 
-# custom_hooks = [dict(type='EarlyStoppingHook',
-#                     monitor='acc/top1',
-#                     rule='greater',
-#                     min_delta=0.001,
-#                     patience=5)]
+custom_hooks = [dict(type='EarlyStoppingHook',
+                    monitor='acc/top1',
+                    rule='greater',
+                    min_delta=0.001,
+                    patience=8)]
 
 find_unused_parameters = True
 
 project='vitclip_hmdb51_amp'
-name='baseline_rand_augment_flash_check_6x8b_30e'
+name='baseline_flash_check_imgaug_fusedecord_test8th'
 
 work_dir = f'./work_dirs/hmdb51/{project}/{name}'
 
@@ -189,6 +180,6 @@ visualizer = dict(
 
 auto_scale_lr = dict(enable=True, base_batch_size=64)
 
-# activation_checkpointing=['backbone.transformer.resblocks.0', 'backbone.transformer.resblocks.1', 'backbone.transformer.resblocks.2',  'backbone.transformer.resblocks.3',
-#                           'backbone.transformer.resblocks.4', 'backbone.transformer.resblocks.5', 'backbone.transformer.resblocks.6',  'backbone.transformer.resblocks.7',
-#                           'backbone.transformer.resblocks.8', 'backbone.transformer.resblocks.9', 'backbone.transformer.resblocks.10', 'backbone.transformer.resblocks.11',]
+activation_checkpointing=['backbone.transformer.resblocks.0', 'backbone.transformer.resblocks.1', 'backbone.transformer.resblocks.2',  'backbone.transformer.resblocks.3',
+                          'backbone.transformer.resblocks.4', 'backbone.transformer.resblocks.5', 'backbone.transformer.resblocks.6',  'backbone.transformer.resblocks.7',
+                          'backbone.transformer.resblocks.8', 'backbone.transformer.resblocks.9', 'backbone.transformer.resblocks.10', 'backbone.transformer.resblocks.11',]

@@ -1,5 +1,5 @@
 _base_ = [
-    '../../_base_/models/vitclip_utuner_base.py', '../../_base_/default_runtime.py'
+    '../../_base_/models/vitclip_base.py', '../../_base_/default_runtime.py'
 ]
 
 
@@ -18,11 +18,6 @@ model = dict(
         drop_path_rate=0.1,
         adapter_scale=0.5,
         tome_r=(4,0)),
-<<<<<<< HEAD
-        tome_r=(4,0)),
-=======
-        tome_r=(8,0)),
->>>>>>> 3189cb338d76331c77ebb96f78980b8d2bf557f8
     data_preprocessor=dict(
         type='ActionDataPreprocessor',
         mean=[122.769, 116.74, 104.04],
