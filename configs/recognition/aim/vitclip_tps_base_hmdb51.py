@@ -93,7 +93,7 @@ test_cfg = dict(type='TestLoop')
 
 # optimizer
 optim_wrapper = dict(
-    type='ApexOptimWrapper',
+    type='AmpOptimWrapper',
     optimizer=dict(
         type='AdamW', lr=3e-4, betas=(0.9, 0.999), weight_decay=0.05),
     paramwise_cfg=dict(
@@ -142,8 +142,8 @@ visualizer = dict(
     type='ActionVisualizer',
     vis_backends=[
         dict(type='LocalVisBackend'),
-        dict(type='TensorboardVisBackend', save_dir=f'{work_dir}/tensorboard'),
-        dict(type='WandbVisBackend',init_kwargs=dict(project='vitclip_tps_hmdb51', name='exp_parallel_Tada_all_apex')),
+        # dict(type='TensorboardVisBackend', save_dir=f'{work_dir}/tensorboard'),
+        # dict(type='WandbVisBackend',init_kwargs=dict(project='vitclip_tps_hmdb51', name='exp_parallel_Tada_all_apex')),
     ],
 )
 

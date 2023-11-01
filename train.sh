@@ -22,7 +22,7 @@ export CUDA_VISIBLE_DEVICES=2
 
 # python tools/train.py configs/recognition/aim/vitclip_ats_base_hmdb51.py
 
-# python tools/train.py configs/recognition/aim/vitclip_utuner_base_hmdb51.py
+python tools/train.py configs/recognition/aim/vitclip_utuner_base_hmdb51.py
 
 # python tools/train.py configs/recognition/aim/vitclip_zeroI2V_base_hmdb51.py
 
@@ -35,4 +35,4 @@ export CUDA_VISIBLE_DEVICES=2
 # fi
 
 # PORT=29666 bash tools/dist_train.sh configs/recognition/aim/vitclip_flash_base_hmdb51.py 1 
-python tools/train.py configs/recognition/aim/vitclip_flash_base_hmdb51.py
+# python tools/train.py configs/recognition/aim/vitclip_flash_base_hmdb51.py

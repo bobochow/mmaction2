@@ -17,7 +17,7 @@ ann_file_test = 'data/diving48/diving48_val_list_videos.txt'
 
 total_epochs = 50
 num_frames=32
-# work_dir = './work_dirs/vitclip_utuner_base_diving48'
+
 train_pipeline = [
     dict(type='DecordInit'),
     dict(type='UniformSample', clip_len=num_frames, num_clips=1),
@@ -56,7 +56,7 @@ test_pipeline = [
     dict(type='PackActionInputs')
 ]
 
-batch_size=1
+batch_size=32
 
 train_dataloader = dict(
     batch_size=batch_size,
@@ -136,7 +136,7 @@ param_scheduler = [
 # runtime settings
 default_hooks = dict(
     checkpoint=dict(interval=2, max_keep_ckpts=1,save_best='auto'), 
-    logger=dict(interval=200)
+    logger=dict(interval=100)
     )
 
 # custom_hooks = [dict(type='EarlyStoppingHook',
@@ -147,7 +147,7 @@ default_hooks = dict(
 
 
 project='vitclip_diving48_amp'
-name='tps_all_rand_augment'
+name='baseline_rand_augment_check'
 
 work_dir = f'./work_dirs/diving48/{project}/{name}'
 
@@ -155,14 +155,14 @@ visualizer = dict(
     type='ActionVisualizer',
     vis_backends=[
         dict(type='LocalVisBackend'),
-        # dict(type='TensorboardVisBackend', save_dir=f'{work_dir}/tensorboard'),
-        # dict(type='WandbVisBackend',init_kwargs=dict(project=project, name=name)),
+        dict(type='TensorboardVisBackend', save_dir=f'{work_dir}/tensorboard'),
+        dict(type='WandbVisBackend',init_kwargs=dict(project=project, name=name)),
     ],
 )
 
 auto_scale_lr = dict(enable=True, base_batch_size=64)
 
-# activation_checkpointing=['backbone.transformer.resblocks.0', 'backbone.transformer.resblocks.1', 'backbone.transformer.resblocks.2',  'backbone.transformer.resblocks.3',
-#                           'backbone.transformer.resblocks.4', 'backbone.transformer.resblocks.5', 'backbone.transformer.resblocks.6',  'backbone.transformer.resblocks.7',
-#                           'backbone.transformer.resblocks.8', 'backbone.transformer.resblocks.9', 'backbone.transformer.resblocks.10', 'backbone.transformer.resblocks.11',]
+activation_checkpointing=['backbone.transformer.resblocks.0', 'backbone.transformer.resblocks.1', 'backbone.transformer.resblocks.2',  'backbone.transformer.resblocks.3',
+                          'backbone.transformer.resblocks.4', 'backbone.transformer.resblocks.5', 'backbone.transformer.resblocks.6',  'backbone.transformer.resblocks.7',
+                          'backbone.transformer.resblocks.8', 'backbone.transformer.resblocks.9', 'backbone.transformer.resblocks.10', 'backbone.transformer.resblocks.11',]
 

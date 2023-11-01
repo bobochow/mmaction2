@@ -4,7 +4,7 @@ _base_ = [
 # model settings
 model = dict(
     backbone=dict(drop_path_rate=0.2, adapter_scale=0.5, num_frames=32),
-    cls_head=dict(num_classes=48),
+    cls_head=dict(num_classes=48,label_smooth_eps=0.02),
     test_cfg=dict(max_testing_views=4))
 
 # dataset settings
@@ -25,6 +25,12 @@ train_pipeline = [
     dict(type='RandomResizedCrop'),
     dict(type='Resize', scale=(224, 224), keep_ratio=False),
     dict(type='Flip', flip_ratio=0.5),
+    dict(
+        type='PytorchVideoWrapper',
+        op='RandAugment',
+        magnitude=7,
+        num_layers=4),
+    dict(type='RandomErasing', erase_prob=0.25, mode='rand'),
     dict(type='FormatShape', input_format='NCTHW'),
     dict(type='PackActionInputs')
 ]
@@ -61,8 +67,10 @@ test_pipeline = [
     dict(type='PackActionInputs')
 ]
 
+batch_size=32
+
 train_dataloader = dict(
-    batch_size=8,
+    batch_size=batch_size,
     num_workers=2,
     persistent_workers=True,
     sampler=dict(type='DefaultSampler', shuffle=True),
@@ -72,7 +80,7 @@ train_dataloader = dict(
         data_prefix=dict(video=data_root),
         pipeline=train_pipeline))
 val_dataloader = dict(
-    batch_size=1,
+    batch_size=batch_size,
     num_workers=1,
     persistent_workers=True,
     sampler=dict(type='DefaultSampler', shuffle=False),

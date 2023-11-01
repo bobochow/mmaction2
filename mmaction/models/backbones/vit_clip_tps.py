@@ -198,107 +198,6 @@ class ResidualAttentionBlock(nn.Module):
         x = x + self.mlp(xn) + self.drop_path(self.scale * self.MLP_Adapter(xn))
         return x
 
-class PatchShift(nn.Module):
-    def __init__(self, n_div=8, inv=False, ratio=1):
-        super(PatchShift, self).__init__()
-        self.fold_div = n_div
-        self.inv = inv
-        self.ratio = ratio
-        if inv:
-            print(
-                f'=> Using inverse PatchShift, head_num: {self.fold_div}, ratio {ratio}, tps'
-            )
-        else:
-            print(f'=> Using PatchShift, head_num: {self.fold_div}, ratio {ratio}, tps')
-
-    def forward(self, x):
-        x = self.shift(x, fold_div=self.fold_div, inv=self.inv, ratio=self.ratio)
-        return x #self.net(x)
-
-    @staticmethod
-    def shift(x, fold_div=3, inv=False, ratio=0.5):
-        B, T ,num_heads, H, W, c = x.size()
-        fold = int(num_heads * ratio)
-        feat = x
-        # feat = feat.view(B, T, num_heads, H, W, c)
-        out = feat.clone()
-        stride = 1
-        multiplier = -1 if inv else 1
-        ## Pattern C
-        out[:, : , :fold, 0::3, 0::3,:] = torch.roll(feat[:, :,  :fold,0::3,0::3,:], shifts=-4*multiplier*stride, dims=1)
-        out[:, : , :fold, 0::3, 1::3,:] = torch.roll(feat[:, :,  :fold,0::3,1::3,:], shifts=multiplier*stride, dims=1)
-        out[:, : , :fold, 1::3, 0::3,:] = torch.roll(feat[:, :,  :fold,1::3,0::3,:], shifts=-multiplier*stride, dims=1)
-        out[:, : , :fold, 0::3, 2::3,:] = torch.roll(feat[:, :,  :fold,0::3,2::3,:], shifts=2*multiplier*stride, dims=1)
-        out[:, : , :fold, 2::3, 0::3,:] = torch.roll(feat[:, :,  :fold,2::3,0::3,:], shifts=-2*multiplier*stride, dims=1)
-        out[:, : , :fold, 1::3, 2::3,:] = torch.roll(feat[:, :,  :fold,1::3,2::3,:], shifts=3*multiplier*stride, dims=1)
-        out[:, : , :fold, 2::3, 1::3,:] = torch.roll(feat[:, :,  :fold,2::3,1::3,:], shifts=-3*multiplier*stride, dims=1)
-        out[:, : , :fold, 2::3, 2::3,:] = torch.roll(feat[:, :,  :fold,2::3,2::3,:], shifts=4*multiplier*stride, dims=1) 
-
-        # out = out.view(B, T ,num_heads, H, W, c)
-        return out
-
-class PatchShift_all(nn.Module):
-    def __init__(self, inv=False):
-        super(PatchShift_all, self).__init__()
-
-        self.inv = inv
-
-        if inv:
-            print('=> Using inverse PatchShift,   tps')
-        else:
-            print('=> Using PatchShift,   tps')
-
-    def forward(self, x):
-        x = self.shift(x, inv=self.inv)
-        return x #self.net(x)
-
-    @staticmethod
-    def shift(x, inv=False):
-        B, T , H, W, c = x.size()
-        feat = x
-        # feat = feat.view(B, T,  H,  W, c)
-        out = feat.clone()
-        stride = 1
-        multiplier = -1 if inv else 1
-        ## Pattern C
-        out[:, :, 0::3, 0::3,:] = torch.roll(feat[:, :,  0::3,0::3,:], shifts=-4*multiplier*stride, dims=1)
-        out[:, :, 0::3, 1::3,:] = torch.roll(feat[:, :,  0::3,1::3,:], shifts=multiplier*stride, dims=1)
-        out[:, :, 1::3, 0::3,:] = torch.roll(feat[:, :,  1::3,0::3,:], shifts=-multiplier*stride, dims=1)
-        out[:, :, 0::3, 2::3,:] = torch.roll(feat[:, :,  0::3,2::3,:], shifts=2*multiplier*stride, dims=1)
-        out[:, :, 2::3, 0::3,:] = torch.roll(feat[:, :,  2::3,0::3,:], shifts=-2*multiplier*stride, dims=1)
-        out[:, :, 1::3, 2::3,:] = torch.roll(feat[:, :,  1::3,2::3,:], shifts=3*multiplier*stride, dims=1)
-        out[:, :, 2::3, 1::3,:] = torch.roll(feat[:, :,  2::3,1::3,:], shifts=-3*multiplier*stride, dims=1)
-        out[:, :, 2::3, 2::3,:] = torch.roll(feat[:, :,  2::3,2::3,:], shifts=4*multiplier*stride, dims=1) 
-
-        # out = out.view(B, T, H, W, c)
-        return out
-
-class TemporalShift(nn.Module):
-    def __init__(self, n_div=8):
-        super(TemporalShift, self).__init__()
-        self.fold_div = n_div
-        print(f'=> Using channel shift, fold_div: {self.fold_div}')
-
-    def forward(self, x):
-        x = self.shift(x, fold_div=self.fold_div)
-        return x
-
-    @staticmethod
-    def shift(x, fold_div=8):
-        B, T ,num_heads, H, W, c = x.size()
-        # B, T, num_heads, N, c = x.size()
-        fold = c // fold_div
-        feat = x
-        feat = feat.view(B, T , num_heads, H*W, c)
-        out = feat.clone()
-
-        out[:, 1: , :, :, :fold] = feat[:, :-1, :, :, :fold]  # shift left
-        out[:, :-1 , :, :, fold:2*fold] = feat[:, 1:, :, :, fold:2*fold]  # shift right 
-
-        out = out.view(B, T ,num_heads, H, W, c)
-
-        return out
-
 class Transformer(nn.Module):
     def __init__(self, num_frames, width: int, layers: int, heads: int, attn_mask: torch.Tensor = None, 
                 scale=1., drop_path=0.1, shift_type: str = 'psm'):
@@ -464,12 +363,110 @@ class ViT_CLIP_TPS(nn.Module):
         x = x.unsqueeze(-1).unsqueeze(-1)  # BDTHW for I3D head
 
         return x
-    
 
-    def train(self, mode: bool = True) -> None:
-        """Convert the model into training mode while keep layers frozen."""
-        super(ViT_CLIP_TPS, self).train(mode)
-        
+
+
+class PatchShift(nn.Module):
+    def __init__(self, n_div=8, inv=False, ratio=1):
+        super(PatchShift, self).__init__()
+        self.fold_div = n_div
+        self.inv = inv
+        self.ratio = ratio
+        if inv:
+            print(
+                f'=> Using inverse PatchShift, head_num: {self.fold_div}, ratio {ratio}, tps'
+            )
+        else:
+            print(f'=> Using PatchShift, head_num: {self.fold_div}, ratio {ratio}, tps')
+
+    def forward(self, x):
+        x = self.shift(x, fold_div=self.fold_div, inv=self.inv, ratio=self.ratio)
+        return x #self.net(x)
+
+    @staticmethod
+    def shift(x, fold_div=3, inv=False, ratio=0.5):
+        B, T ,num_heads, H, W, c = x.size()
+        fold = int(num_heads * ratio)
+        feat = x
+        # feat = feat.view(B, T, num_heads, H, W, c)
+        out = feat.clone()
+        stride = 1
+        multiplier = -1 if inv else 1
+        ## Pattern C
+        out[:, : , :fold, 0::3, 0::3,:] = torch.roll(feat[:, :,  :fold,0::3,0::3,:], shifts=-4*multiplier*stride, dims=1)
+        out[:, : , :fold, 0::3, 1::3,:] = torch.roll(feat[:, :,  :fold,0::3,1::3,:], shifts=multiplier*stride, dims=1)
+        out[:, : , :fold, 1::3, 0::3,:] = torch.roll(feat[:, :,  :fold,1::3,0::3,:], shifts=-multiplier*stride, dims=1)
+        out[:, : , :fold, 0::3, 2::3,:] = torch.roll(feat[:, :,  :fold,0::3,2::3,:], shifts=2*multiplier*stride, dims=1)
+        out[:, : , :fold, 2::3, 0::3,:] = torch.roll(feat[:, :,  :fold,2::3,0::3,:], shifts=-2*multiplier*stride, dims=1)
+        out[:, : , :fold, 1::3, 2::3,:] = torch.roll(feat[:, :,  :fold,1::3,2::3,:], shifts=3*multiplier*stride, dims=1)
+        out[:, : , :fold, 2::3, 1::3,:] = torch.roll(feat[:, :,  :fold,2::3,1::3,:], shifts=-3*multiplier*stride, dims=1)
+        out[:, : , :fold, 2::3, 2::3,:] = torch.roll(feat[:, :,  :fold,2::3,2::3,:], shifts=4*multiplier*stride, dims=1) 
+
+        # out = out.view(B, T ,num_heads, H, W, c)
+        return out
+
+class PatchShift_all(nn.Module):
+    def __init__(self, inv=False):
+        super(PatchShift_all, self).__init__()
+
+        self.inv = inv
+
+        if inv:
+            print('=> Using inverse PatchShift,   tps')
+        else:
+            print('=> Using PatchShift,   tps')
+
+    def forward(self, x):
+        x = self.shift(x, inv=self.inv)
+        return x #self.net(x)
+
+    @staticmethod
+    def shift(x, inv=False):
+        B, T , H, W, c = x.size()
+        feat = x
+        # feat = feat.view(B, T,  H,  W, c)
+        out = feat.clone()
+        stride = 1
+        multiplier = -1 if inv else 1
+        ## Pattern C
+        out[:, :, 0::3, 0::3,:] = torch.roll(feat[:, :,  0::3,0::3,:], shifts=-4*multiplier*stride, dims=1)
+        out[:, :, 0::3, 1::3,:] = torch.roll(feat[:, :,  0::3,1::3,:], shifts=multiplier*stride, dims=1)
+        out[:, :, 1::3, 0::3,:] = torch.roll(feat[:, :,  1::3,0::3,:], shifts=-multiplier*stride, dims=1)
+        out[:, :, 0::3, 2::3,:] = torch.roll(feat[:, :,  0::3,2::3,:], shifts=2*multiplier*stride, dims=1)
+        out[:, :, 2::3, 0::3,:] = torch.roll(feat[:, :,  2::3,0::3,:], shifts=-2*multiplier*stride, dims=1)
+        out[:, :, 1::3, 2::3,:] = torch.roll(feat[:, :,  1::3,2::3,:], shifts=3*multiplier*stride, dims=1)
+        out[:, :, 2::3, 1::3,:] = torch.roll(feat[:, :,  2::3,1::3,:], shifts=-3*multiplier*stride, dims=1)
+        out[:, :, 2::3, 2::3,:] = torch.roll(feat[:, :,  2::3,2::3,:], shifts=4*multiplier*stride, dims=1) 
+
+        # out = out.view(B, T, H, W, c)
+        return out
+
+class TemporalShift(nn.Module):
+    def __init__(self, n_div=8):
+        super(TemporalShift, self).__init__()
+        self.fold_div = n_div
+        print(f'=> Using channel shift, fold_div: {self.fold_div}')
+
+    def forward(self, x):
+        x = self.shift(x, fold_div=self.fold_div)
+        return x
+
+    @staticmethod
+    def shift(x, fold_div=8):
+        B, T ,num_heads, H, W, c = x.size()
+        # B, T, num_heads, N, c = x.size()
+        fold = c // fold_div
+        feat = x
+        feat = feat.view(B, T , num_heads, H*W, c)
+        out = feat.clone()
+
+        out[:, 1: , :, :, :fold] = feat[:, :-1, :, :, :fold]  # shift left
+        out[:, :-1 , :, :, fold:2*fold] = feat[:, 1:, :, :, fold:2*fold]  # shift right 
+
+        out = out.view(B, T ,num_heads, H, W, c)
+
+        return out
+
 
 if __name__ == '__main__':
 

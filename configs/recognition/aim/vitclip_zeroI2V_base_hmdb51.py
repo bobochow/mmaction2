@@ -38,12 +38,12 @@ train_pipeline = [
     dict(type='RandomResizedCrop'),
     dict(type='Resize', scale=(224, 224), keep_ratio=False),
     dict(type='Flip', flip_ratio=0.5),
-    dict(
-        type='PytorchVideoWrapper',
-        op='RandAugment',
-        magnitude=7,
-        num_layers=4),
-    dict(type='RandomErasing', erase_prob=0.25, mode='rand'),
+    # dict(
+    #     type='PytorchVideoWrapper',
+    #     op='RandAugment',
+    #     magnitude=7,
+    #     num_layers=4),
+    # dict(type='RandomErasing', erase_prob=0.25, mode='rand'),
     dict(type='FormatShape', input_format='NCTHW'),
     dict(type='PackActionInputs')
 ]
@@ -164,7 +164,7 @@ custom_hooks = [dict(type='EarlyStoppingHook',
                     patience=8)]
 
 project='vitclip_hmdb51_amp'
-name='zeroI2V_tcls_aug'
+name='zeroI2V_tcls_noaug'
 
 work_dir = f'./work_dirs/hmdb51/{project}/{name}'
 
@@ -172,8 +172,8 @@ visualizer = dict(
     type='ActionVisualizer',
     vis_backends=[
         dict(type='LocalVisBackend'),
-        dict(type='TensorboardVisBackend', save_dir=f'{work_dir}/tensorboard'),
-        dict(type='WandbVisBackend',init_kwargs=dict(project=project, name=name)),
+        # dict(type='TensorboardVisBackend', save_dir=f'{work_dir}/tensorboard'),
+        # dict(type='WandbVisBackend',init_kwargs=dict(project=project, name=name)),
     ],
 )
 

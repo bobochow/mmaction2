@@ -21,11 +21,15 @@ ann_file_test = 'data/hmdb51/hmdb51_val_split_1_videos.txt'
 # dataset_type = 'RawframeDataset'
 # data_root = 'data/hmdb51/rawframes'
 # data_root_val = 'data/hmdb51/rawframes'
+
+# # data_root = 'data/hmdb51/rawframes_ssd'
+# # data_root_val = 'data/hmdb51/rawframes_ssd'
+
 # ann_file_train = 'data/hmdb51/hmdb51_train_split_1_rawframes.txt'
 # ann_file_val = 'data/hmdb51/hmdb51_val_split_1_rawframes.txt'
 # ann_file_test = 'data/hmdb51/hmdb51_val_split_1_rawframes.txt'
 
-file_client_args = dict(io_backend='disk')
+# file_client_args = dict(io_backend='disk')
 
 total_epochs = 30
 num_frames=32
@@ -40,11 +44,12 @@ train_pipeline = [
     dict(type='RandomResizedCrop'),
     dict(type='Resize', scale=(224, 224), keep_ratio=False),
     dict(type='Flip', flip_ratio=0.5),
-    dict(
-        type='PytorchVideoWrapper',
-        op='RandAugment',
-        magnitude=7,
-        num_layers=4),
+    # dict(
+    #     type='PytorchVideoWrapper',
+    #     op='RandAugment',
+    #     magnitude=7,
+    #     num_layers=4),
+    dict(type='ImgAug', transforms=[dict(type='RandAugment', n=4, m=7)]),
     dict(type='RandomErasing', erase_prob=0.25, mode='rand'),
     dict(type='FormatShape', input_format='NCTHW'),
     dict(type='PackActionInputs')
@@ -78,7 +83,7 @@ test_pipeline = [
 batch_size=8
 train_dataloader = dict(
     batch_size=batch_size,
-    num_workers=2,
+    num_workers=8,
     persistent_workers=True,
     sampler=dict(type='DefaultSampler', shuffle=True),
     dataset=dict(
@@ -89,7 +94,7 @@ train_dataloader = dict(
         pipeline=train_pipeline))
 val_dataloader = dict(
     batch_size=batch_size,
-    num_workers=2,
+    num_workers=8,
     persistent_workers=True,
     sampler=dict(type='DefaultSampler', shuffle=False),
     dataset=dict(
@@ -156,7 +161,7 @@ param_scheduler = [
 # runtime settings
 default_hooks = dict(
     checkpoint=dict(interval=5, max_keep_ckpts=1,save_best='auto'), 
-    logger=dict(interval=100)
+    logger=dict(interval=10)
     )
 
 custom_hooks = [dict(type='EarlyStoppingHook',
@@ -167,7 +172,7 @@ custom_hooks = [dict(type='EarlyStoppingHook',
 
 
 project='vitclip_hmdb51_amp'
-name='baseline_rand_augment'
+name='baseline_aug'
 
 work_dir = f'./work_dirs/hmdb51/{project}/{name}'
 
@@ -175,8 +180,8 @@ visualizer = dict(
     type='ActionVisualizer',
     vis_backends=[
         dict(type='LocalVisBackend'),
-        dict(type='TensorboardVisBackend', save_dir=f'{work_dir}/tensorboard'),
-        dict(type='WandbVisBackend',init_kwargs=dict(project=project, name=name)),
+        # dict(type='TensorboardVisBackend', save_dir=f'{work_dir}/tensorboard'),
+        # dict(type='WandbVisBackend',init_kwargs=dict(project=project, name=name)),
     ],
 )
 
