@@ -7,7 +7,7 @@ num_frames=32
 # model settings
 model = dict(
     backbone=dict(type='ViT_CLIP_FLASH',drop_path_rate=0.2, adapter_scale=0.5, num_frames=num_frames,use_flash_attn=True),
-    cls_head=dict(num_classes=51,label_smooth_eps=0.1),
+    cls_head=dict(num_classes=51),
 )
 
 # dataset settings
@@ -26,7 +26,7 @@ total_epochs = 30
 train_pipeline = [
     
     # dict(type='DecordInit'),
-    dict(type='FusedDecordInit',fast_rrc=True,rrc_params=(224, (0.08, 1.0)),hflip_prob=0.5,num_threads=8),
+    dict(type='FusedDecordInit',fast_rrc=True,rrc_params=(224, (0.5, 1.0)),hflip_prob=0.5),
     
     dict(type='UniformSample', clip_len=num_frames, num_clips=1),
     dict(type='DecordDecode'),
@@ -35,26 +35,26 @@ train_pipeline = [
     # dict(type='RandomResizedCrop'),
     # dict(type='Resize', scale=(224, 224), keep_ratio=False),
     # dict(type='Flip', flip_ratio=0.5),
-    # dict(
-    #     type='PytorchVideoWrapper',
-    #     op='RandAugment',
-    #     magnitude=7,
-    #     num_layers=4),
-    dict(type='ImgAug', transforms=[dict(type='RandAugment', n=4, m=7)]),
+    dict(
+        type='PytorchVideoWrapper',
+        op='RandAugment',
+        magnitude=7,
+        num_layers=4),
+    # dict(type='ImgAug', transforms=[dict(type='RandAugment', n=4, m=7)]),
     dict(type='RandomErasing', erase_prob=0.25, mode='rand'),
     dict(type='FormatShape', input_format='NCTHW'),
     dict(type='PackActionInputs')
 ]
 
 val_pipeline = [
-    # dict(type='DecordInit'),
-    dict(type='FusedDecordInit',fast_cc=True,cc_params=(224,)),
+    dict(type='DecordInit'),
+    # dict(type='FusedDecordInit',fast_cc=True,cc_params=(224,)),
     dict(type='UniformSample', clip_len=num_frames, num_clips=1,test_mode=True),
     dict(type='DecordDecode'),
     # dict(type='RawFrameDecode', **file_client_args),
-    # dict(type='Resize', scale=(-1, 256)),
-    # dict(type='CenterCrop', crop_size=224),
-    # dict(type='Flip', flip_ratio=0),
+    dict(type='Resize', scale=(-1, 256)),
+    dict(type='CenterCrop', crop_size=224),
+    dict(type='Flip', flip_ratio=0),
     dict(type='FormatShape', input_format='NCTHW'),
     dict(type='PackActionInputs')
 ]
@@ -165,7 +165,7 @@ custom_hooks = [dict(type='EarlyStoppingHook',
 find_unused_parameters = True
 
 project='vitclip_hmdb51_amp'
-name='baseline_flash_check_imgaug_fusedecord_test8th'
+name='baseline_flash_check_aug_fusedecord'
 
 work_dir = f'./work_dirs/hmdb51/{project}/{name}'
 

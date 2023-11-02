@@ -1,5 +1,5 @@
 _base_ = [
-    '../../_base_/models/vitclip_utuner_base.py', '../../_base_/default_runtime.py'
+    '../../_base_/models/vitclip_base.py', '../../_base_/default_runtime.py'
 ]
 
 # load_from='work_dirs/vitclip_tps_utuner_k400/best_acc_top1_epoch_5.pth'
@@ -7,7 +7,7 @@ _base_ = [
 # model settings
 model = dict(
     backbone=dict(drop_path_rate=0.2, adapter_scale=0.5, num_frames=32,shift=False),
-    cls_head=dict(num_classes=51,label_smooth_eps=0.1),
+    cls_head=dict(num_classes=51),
 )
 
 # dataset settings
@@ -17,17 +17,6 @@ data_root_val = 'data/hmdb51/videos'
 ann_file_train = 'data/hmdb51/hmdb51_train_split_1_videos.txt'
 ann_file_val = 'data/hmdb51/hmdb51_val_split_1_videos.txt'
 ann_file_test = 'data/hmdb51/hmdb51_val_split_1_videos.txt'
-
-# dataset_type = 'RawframeDataset'
-# data_root = 'data/hmdb51/rawframes'
-# data_root_val = 'data/hmdb51/rawframes'
-
-# # data_root = 'data/hmdb51/rawframes_ssd'
-# # data_root_val = 'data/hmdb51/rawframes_ssd'
-
-# ann_file_train = 'data/hmdb51/hmdb51_train_split_1_rawframes.txt'
-# ann_file_val = 'data/hmdb51/hmdb51_val_split_1_rawframes.txt'
-# ann_file_test = 'data/hmdb51/hmdb51_val_split_1_rawframes.txt'
 
 file_client_args = dict(io_backend='disk')
 
@@ -42,31 +31,30 @@ train_pipeline = [
     
     dict(type='UniformSample', clip_len=num_frames, num_clips=1),
     dict(type='DecordDecode'),
-    # dict(type='RawFrameDecode', **file_client_args),  # Load and decode Frames pipeline, picking raw frames with given indices
     # dict(type='Resize', scale=(-1, 256)),
     # dict(type='RandomResizedCrop'),
     # dict(type='Resize', scale=(224, 224), keep_ratio=False),
     # dict(type='Flip', flip_ratio=0.5),
-    # dict(
-    #     type='PytorchVideoWrapper',
-    #     op='RandAugment',
-    #     magnitude=7,
-    #     num_layers=4),
-    dict(type='ImgAug', transforms=[dict(type='RandAugment', n=4, m=7)]),
+    dict(
+        type='PytorchVideoWrapper',
+        op='RandAugment',
+        magnitude=7,
+        num_layers=4),
+    # dict(type='ImgAug', transforms=[dict(type='RandAugment', n=4, m=7)]),
     dict(type='RandomErasing', erase_prob=0.25, mode='rand'),
     dict(type='FormatShape', input_format='NCTHW'),
     dict(type='PackActionInputs')
 ]
 
 val_pipeline = [
-    # dict(type='DecordInit'),
-    dict(type='FusedDecordInit',fast_cc=True,cc_params=(224,)),
+    dict(type='DecordInit'),
+    # dict(type='FusedDecordInit',fast_cc=True,cc_params=(224,)),
     dict(type='UniformSample', clip_len=num_frames, num_clips=1,test_mode=True),
     dict(type='DecordDecode'),
     # dict(type='RawFrameDecode', **file_client_args),
-    # dict(type='Resize', scale=(-1, 256)),
-    # dict(type='CenterCrop', crop_size=224),
-    # dict(type='Flip', flip_ratio=0),
+    dict(type='Resize', scale=(-1, 256)),
+    dict(type='CenterCrop', crop_size=224),
+    dict(type='Flip', flip_ratio=0),
     dict(type='FormatShape', input_format='NCTHW'),
     dict(type='PackActionInputs')
 ]
