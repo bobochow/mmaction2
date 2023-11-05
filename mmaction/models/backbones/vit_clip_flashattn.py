@@ -152,9 +152,10 @@ class ResidualAttentionBlock(nn.Module):
         super().__init__()
 
         self.use_flash_attn = use_flash_attn
-        # if self.use_flash_attn:
-        self.attn = FlashMHA(d_model, n_head, cross_attn=False, dropout=0., use_flash_attn=use_flash_attn)
-        # else:
+        if shift:
+            self.attn = FlashMHA(d_model, n_head, cross_attn=True, dropout=0., use_flash_attn=use_flash_attn)
+        else:
+            self.attn = FlashMHA(d_model, n_head, cross_attn=False, dropout=0., use_flash_attn=use_flash_attn)
         #     self.attn = nn.MultiheadAttention(d_model, n_head)
         
         self.ln_1 = LayerNorm(d_model)
@@ -244,7 +245,7 @@ class ResidualAttentionBlock(nn.Module):
         ln_xt=self.ln_1(xt)
         
         # if self.use_flash_attn:
-        xt = self.T_Adapter(self.attn(ln_xt))
+        xt = self.T_Adapter(self.attn(x=ln_xt,x_kv=ln_xt))
         
         xt = rearrange(xt, '(b n) t d -> (b t) n d', n=1)
         # x = x + self.drop_path(xt)
@@ -254,7 +255,7 @@ class ResidualAttentionBlock(nn.Module):
             xln=self.ln_1(x)
             tmp_x = xln[ :, 2:, :].clone()
             
-            L, NT, C = tmp_x.shape
+            NT, L,  C = tmp_x.shape
             T = self.num_frames
             N = NT // self.num_frames
             H = W = int(L**0.5)
@@ -266,10 +267,10 @@ class ResidualAttentionBlock(nn.Module):
             tmp_x = tmp_x.view(NT, C, -1).permute(0, 2, 1).contiguous() #  NT P C
             tmp_x = torch.cat([xln, tmp_x], dim=1)
             
-            if self.use_flash_attn:
-                x = x + self.S_Adapter(self.attn(x=xln,x_kv=tmp_x)) 
-            else:
-                x = x + self.S_Adapter(self.cross_attention(xln,tmp_x)) 
+            # if self.use_flash_attn:
+            x = x + self.S_Adapter(self.attn(x=xln,x_kv=tmp_x)) 
+            # else:
+            #     x = x + self.S_Adapter(self.cross_attention(xln,tmp_x)) 
             
         else:
             # if self.use_flash_attn:
@@ -386,11 +387,11 @@ class TemporalShift(nn.Module):
 
 class Transformer(nn.Module):
     def __init__(self, num_frames, width: int, layers: int, heads: int, attn_mask: torch.Tensor = None, 
-                scale=1., drop_path=0.1, shift_type: str = 'psm', use_flash_attn: bool = False):
+                scale=1., drop_path=0.1, shift = False, shift_type: str = 'psm', use_flash_attn: bool = False):
         super().__init__()
         self.width = width
         self.layers = layers
-        self.shift_type = shift_type
+        
         dpr = [x.item() for x in torch.linspace(0, drop_path, self.layers)]
         
         self.resblocks = nn.Sequential(
@@ -402,8 +403,8 @@ class Transformer(nn.Module):
                     scale,
                     num_frames,
                     dpr[i],
-                    shift= False,
-                    shift_type='psm',
+                    shift= shift,
+                    shift_type=shift_type,
                     use_flash_attn=use_flash_attn
                 )
                 for i in range(layers)
@@ -416,14 +417,23 @@ class Transformer(nn.Module):
 @MODELS.register_module()
 class ViT_CLIP_FLASH(nn.Module):
     ## ViT definition in CLIP image encoder
-    def __init__(self, input_resolution: int, num_frames: int, patch_size: int, width: int, layers: int, heads: int, drop_path_rate, adapter_scale=0.5, pretrained=None, use_flash_attn: bool = False ):
+    def __init__(self, input_resolution: int, num_frames: int, patch_size: int, width: int, layers: int, heads: int, drop_path_rate, 
+                adapter_scale=0.5, 
+                pretrained=None, 
+                shift = False,
+                shift_type='psm',
+                use_flash_attn: bool = False ):
         super().__init__()
         self.input_resolution = input_resolution
         self.pretrained = pretrained
         self.conv1 = nn.Conv2d(in_channels=3, out_channels=width, kernel_size=patch_size, stride=patch_size, bias=False)
-
+        
         scale = width ** -0.5
         self.layers = layers
+        
+        self.shift=shift
+        self.width=width
+        
         self.class_embedding = nn.Parameter(scale * torch.randn(width))
         self.positional_embedding = nn.Parameter(scale * torch.randn((input_resolution // patch_size) ** 2 + 1, width))
         self.ln_pre = LayerNorm(width)
@@ -431,7 +441,11 @@ class ViT_CLIP_FLASH(nn.Module):
         self.num_frames = num_frames
         self.temporal_embedding = nn.Parameter(torch.zeros(1, num_frames, width))
 
-        self.transformer = Transformer(num_frames, width, layers, heads, scale=adapter_scale, drop_path=drop_path_rate, use_flash_attn=use_flash_attn)
+        
+        
+        self.transformer = Transformer(num_frames, width, layers, heads, scale=adapter_scale, drop_path=drop_path_rate,
+                                        shift=shift ,shift_type=shift_type,
+                                        use_flash_attn=use_flash_attn)
 
         self.ln_post = LayerNorm(width)
         
@@ -480,17 +494,34 @@ class ViT_CLIP_FLASH(nn.Module):
             #     'mlp.c_fc.weight': 'mlp.fc1.weight', 'mlp.c_fc.bias': 'mlp.fc1.bias',
             #     'mlp.c_proj.weight': 'mlp.fc2.weight', 'mlp.c_proj.bias': 'mlp.fc2.bias',
             
-            swaps = [('attn.in_proj_weight', 'attn.Wqkv.weight'), ('attn.in_proj_bias', 'attn.Wqkv.bias'),
+            if not self.shift:
+                swaps = [('attn.in_proj_weight', 'attn.Wqkv.weight'), ('attn.in_proj_bias', 'attn.Wqkv.bias'),
+                    ('attn.out_proj.weight','attn.out_proj.weight'),('attn.out_proj.bias','attn.out_proj.bias'),
+                    ('mlp.c_fc.weight','mlp.fc1.weight'),('mlp.c_fc.bias','mlp.fc1.bias'),
+                    ('mlp.c_proj.weight','mlp.fc2.weight'),('mlp.c_proj.bias','mlp.fc2.bias')]
+            else:
+                swaps = [('attn.in_proj_weight', 'attn.Wq.weight','attn.Wkv.weight'), ('attn.in_proj_bias', 'attn.Wq.bias','attn.Wkv.bias'),
                     ('attn.out_proj.weight','attn.out_proj.weight'),('attn.out_proj.bias','attn.out_proj.bias'),
                     ('mlp.c_fc.weight','mlp.fc1.weight'),('mlp.c_fc.bias','mlp.fc1.bias'),
                     ('mlp.c_proj.weight','mlp.fc2.weight'),('mlp.c_proj.bias','mlp.fc2.bias')]
             
             out_dict={}
             for k, v in pretrain_dict.items():
+                flag=True
                 for sp in swaps:
-                    k = k.replace(sp[0], sp[1])
-            
-                out_dict[k] = v
+                    if sp[0] in k:
+                        if len(sp)==2:
+                            k = k.replace(sp[0], sp[1])
+                            out_dict[k] = v
+                        else:
+                            k2=k
+                            k = k.replace(sp[0], sp[1])
+                            out_dict[k] = v[:self.width]
+                            k2 = k2.replace(sp[0], sp[2])
+                            out_dict[k2] = v[self.width:]
+                        flag=False
+                if flag:
+                    out_dict[k]=v
             
             msg = self.load_state_dict(out_dict, strict=False)
             
