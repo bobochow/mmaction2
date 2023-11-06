@@ -705,7 +705,7 @@ if __name__ == '__main__':
                         layers=12,
                         heads=12,
                         drop_path_rate=0.1,
-                        froze=True)
+                        )
 
     analysis_results = get_model_complexity_info(model, input_shape)
 

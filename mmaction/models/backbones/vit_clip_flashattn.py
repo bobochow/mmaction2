@@ -245,7 +245,10 @@ class ResidualAttentionBlock(nn.Module):
         ln_xt=self.ln_1(xt)
         
         # if self.use_flash_attn:
-        xt = self.T_Adapter(self.attn(x=ln_xt,x_kv=ln_xt))
+        if self.shift:
+            xt = self.T_Adapter(self.attn(x=ln_xt,x_kv=ln_xt))
+        else:
+            xt = self.T_Adapter(self.attn(ln_xt))
         
         xt = rearrange(xt, '(b n) t d -> (b t) n d', n=1)
         # x = x + self.drop_path(xt)
