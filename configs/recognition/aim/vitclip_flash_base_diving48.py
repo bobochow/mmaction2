@@ -6,7 +6,7 @@ _base_ = [
 num_frames=32
 # model settings
 model = dict(
-    backbone=dict(type='ViT_CLIP_FLASH',drop_path_rate=0.2, adapter_scale=0.5, num_frames=num_frames,use_flash_attn=True),
+    backbone=dict(type='ViT_CLIP_FLASH',drop_path_rate=0.2, adapter_scale=0.5, num_frames=num_frames,use_flash_attn=True,shift=True),
     cls_head=dict(num_classes=48),
 )
 
@@ -35,12 +35,12 @@ train_pipeline = [
     # dict(type='RandomResizedCrop'),
     # dict(type='Resize', scale=(224, 224), keep_ratio=False),
     # dict(type='Flip', flip_ratio=0.5),
-    dict(
-        type='PytorchVideoWrapper',
-        op='RandAugment',
-        magnitude=7,
-        num_layers=4),
-    # dict(type='ImgAug', transforms=[dict(type='RandAugment', n=4, m=7)]),
+    # dict(
+    #     type='PytorchVideoWrapper',
+    #     op='RandAugment',
+    #     magnitude=7,
+    #     num_layers=4),
+    dict(type='ImgAug', transforms=[dict(type='RandAugment', n=4, m=7)]),
     dict(type='RandomErasing', erase_prob=0.25, mode='rand'),
     dict(type='FormatShape', input_format='NCTHW'),
     dict(type='PackActionInputs')
@@ -170,7 +170,7 @@ find_unused_parameters = True
 
 
 project='vitclip_diving48_amp'
-name='baseline_flash_check_aug_fusedecord'
+name='tps_flash_check_imgaug_fusedecord'
 
 work_dir = f'./work_dirs/diving48/{project}/{name}'
 

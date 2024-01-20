@@ -6,7 +6,7 @@ _base_ = [
 
 # model settings
 model = dict(
-    backbone=dict(type='ViT_CLIP_UTUNER',drop_path_rate=0.2, adapter_scale=0.5, num_frames=32,shift=False),
+    backbone=dict(type='ViT_CLIP_UTUNER',drop_path_rate=0.2, adapter_scale=0.5, num_frames=32,shift=True),
     cls_head=dict(num_classes=51,label_smooth_eps=0.1),
 )
 
@@ -44,12 +44,12 @@ train_pipeline = [
     dict(type='RandomResizedCrop'),
     dict(type='Resize', scale=(224, 224), keep_ratio=False),
     dict(type='Flip', flip_ratio=0.5),
-    # dict(
-    #     type='PytorchVideoWrapper',
-    #     op='RandAugment',
-    #     magnitude=7,
-    #     num_layers=4),
-    dict(type='ImgAug', transforms=[dict(type='RandAugment', n=4, m=7)]),
+    dict(
+        type='PytorchVideoWrapper',
+        op='RandAugment',
+        magnitude=7,
+        num_layers=4),
+    # dict(type='ImgAug', transforms=[dict(type='RandAugment', n=4, m=7)]),
     dict(type='RandomErasing', erase_prob=0.25, mode='rand'),
     dict(type='FormatShape', input_format='NCTHW'),
     dict(type='PackActionInputs')
@@ -80,7 +80,7 @@ test_pipeline = [
 ]
 
 
-batch_size=4
+batch_size=48
 train_dataloader = dict(
     batch_size=batch_size,
     num_workers=8,

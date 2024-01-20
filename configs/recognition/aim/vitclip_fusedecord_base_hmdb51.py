@@ -6,7 +6,7 @@ _base_ = [
 
 # model settings
 model = dict(
-    backbone=dict(drop_path_rate=0.2, adapter_scale=0.5, num_frames=32,shift=False),
+    backbone=dict(type='ViT_CLIP_UTUNER',drop_path_rate=0.2, adapter_scale=0.5, num_frames=32,shift=True),
     cls_head=dict(num_classes=51),
 )
 
@@ -54,7 +54,7 @@ val_pipeline = [
     # dict(type='RawFrameDecode', **file_client_args),
     dict(type='Resize', scale=(-1, 256)),
     dict(type='CenterCrop', crop_size=224),
-    dict(type='Flip', flip_ratio=0),
+    # dict(type='Flip', flip_ratio=0),
     dict(type='FormatShape', input_format='NCTHW'),
     dict(type='PackActionInputs')
 ]
@@ -72,7 +72,7 @@ test_pipeline = [
 ]
 
 
-batch_size=48
+batch_size=32
 train_dataloader = dict(
     batch_size=batch_size,
     num_workers=8,
@@ -114,7 +114,7 @@ test_evaluator = val_evaluator
 
 train_cfg = dict(
     type='EpochBasedTrainLoop', max_epochs=total_epochs, val_begin=2, val_interval=1)
-val_cfg = dict(type='ValLoop')
+val_cfg = dict(type='ValLoop',fp16=True)
 test_cfg = dict(type='TestLoop')
 
 # optimizer
@@ -160,11 +160,11 @@ custom_hooks = [dict(type='EarlyStoppingHook',
                     monitor='acc/top1',
                     rule='greater',
                     min_delta=0.001,
-                    patience=5)]
+                    patience=8)]
 
 
 project='vitclip_hmdb51_amp'
-name='baseline_fusedecord'
+name='tps_check_aug_fusedecord'
 
 work_dir = f'./work_dirs/hmdb51/{project}/{name}'
 
@@ -172,8 +172,8 @@ visualizer = dict(
     type='ActionVisualizer',
     vis_backends=[
         dict(type='LocalVisBackend'),
-        # dict(type='TensorboardVisBackend', save_dir=f'{work_dir}/tensorboard'),
-        # dict(type='WandbVisBackend',init_kwargs=dict(project=project, name=name)),
+        dict(type='TensorboardVisBackend', save_dir=f'{work_dir}/tensorboard'),
+        dict(type='WandbVisBackend',init_kwargs=dict(project=project, name=name)),
     ],
 )
 

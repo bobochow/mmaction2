@@ -19,7 +19,56 @@ from flash_attn.modules.mlp import Mlp as FlashMlp
 
 from torch.utils.checkpoint import checkpoint
 
+from functools import reduce, lru_cache
+from operator import mul
+
 logger = MMLogger.get_current_instance()
+
+def window_partition(x, window_size):
+    """
+    Args:
+        x: (B, T, H, W, C)
+        window_size (tuple[int]): window size
+
+    Returns:
+        windows: (B*num_windows, window_size*window_size, C)
+    """
+    B, D, H, W, C = x.shape
+    x = x.view(B, D // window_size[0], window_size[0], H // window_size[1], window_size[1], W // window_size[2], window_size[2], C)
+    windows = x.permute(0, 1, 3, 5, 2, 4, 6, 7).contiguous().view(-1, reduce(mul, window_size), C)
+    
+    return windows
+
+def window_reverse(windows, window_size, B, D, H, W):
+    """
+    Args:
+        windows: (B*num_windows, window_size, window_size, C)
+        window_size (tuple[int]): Window size
+        H (int): Height of image
+        W (int): Width of image
+
+    Returns:
+        x: (B, D, H, W, C)
+    """
+    x = windows.view(B, D // window_size[0], H // window_size[1], W // window_size[2], window_size[0], window_size[1], window_size[2], -1)
+    x = x.permute(0, 1, 4, 2, 5, 3, 6, 7).contiguous().view(B, D, H, W, -1)
+    
+    return x
+
+def get_window_size(x_size, window_size, shift_size=None):
+    use_window_size = list(window_size)
+    if shift_size is not None:
+        use_shift_size = list(shift_size)
+    for i in range(len(x_size)):
+        if x_size[i] <= window_size[i]:
+            use_window_size[i] = x_size[i]
+            if shift_size is not None:
+                use_shift_size[i] = 0
+
+    if shift_size is None:
+        return tuple(use_window_size)
+    else:
+        return tuple(use_window_size), tuple(use_shift_size)
 
 # util functions to convert OpenCLIP-style model keys to ViT-style
 def remap_keys_from_open_clip_to_vit(
@@ -145,22 +194,15 @@ class QuickGELU(nn.Module):
 class ResidualAttentionBlock(nn.Module):
     def __init__(self, d_model: int, n_head: int, attn_mask: torch.Tensor = None,
                 scale=1., num_frames=8, drop_path=0.,
-                shift: bool = False, 
-                shift_type: str = 'psm',
-                use_flash_attn: bool = False,
+                use_flash_attn: bool = False,prompt=True,wind_attn=False,window_size=(32,2,2),shift_size=(0,0,0)
                 ):
         super().__init__()
 
         self.use_flash_attn = use_flash_attn
-        if shift:
-            self.attn = FlashMHA(d_model, n_head, cross_attn=True, dropout=0., use_flash_attn=use_flash_attn)
-        else:
-            self.attn = FlashMHA(d_model, n_head, cross_attn=False, dropout=0., use_flash_attn=use_flash_attn)
-        #     self.attn = nn.MultiheadAttention(d_model, n_head)
+        self.attn = FlashMHA(d_model, n_head, cross_attn=False, dropout=0., use_flash_attn=use_flash_attn)
         
         self.ln_1 = LayerNorm(d_model)
         
-        # if self.use_flash_attn:
         mlp_width = int(d_model * 4)
         self.mlp = FlashMlp(d_model, hidden_features=mlp_width, activation=QuickGELU())
         # else:
@@ -175,114 +217,97 @@ class ResidualAttentionBlock(nn.Module):
         self.n_head = n_head
         self.d_model=d_model
         
-        self.shift = shift
-        self.shift_type = shift_type
-
         self.MLP_Adapter = Adapter(d_model, skip_connect=False)
-        self.S_Adapter = Adapter(d_model)
+        self.S_Adapter = Adapter(d_model, skip_connect=False)
         self.scale = scale
         self.T_Adapter = Adapter(d_model, skip_connect=False)
         self.num_frames = num_frames
         self.drop_path = DropPath(drop_path) if drop_path > 0. else nn.Identity()
         
+        self.prompt=prompt
+        self.wind_attn=wind_attn
+        if self.wind_attn:
+            self.window_size = window_size
+            self.shift_size = shift_size
         
-        if self.shift:
-            if self.shift_type == 'psm':
-                # self.shift_op = PatchShift(self.n_head, False, 1)
-                # self.shift_op_back = PatchShift(self.n_head, True, 1)
-                self.shift_op = PatchShift_all(False)
-                # self.shift_op_back = PatchShift_all(True)
-            
-            elif self.shift_type == 'tsm':
-                self.shift_op = TemporalShift(8)
-
-    def attention(self, x: torch.Tensor):
-        self.attn_mask = self.attn_mask.to(dtype=x.dtype, device=x.device) if self.attn_mask is not None else None
-        return self.attn(x, x, x, need_weights=False, attn_mask=self.attn_mask)[0]
-
-    def cross_attention(self, q: torch.Tensor, k: torch.Tensor, v: torch.Tensor):
-        self.attn_mask = self.attn_mask.to(dtype=q.dtype, device=q.device) if self.attn_mask is not None else None
-        return self.attn(q, k, v, need_weights=False, attn_mask=self.attn_mask)[0]
-    
-    # def attention(
-    #     self, x: torch.Tensor , y: torch.Tensor
-    # ) -> Tuple[torch.Tensor, torch.Tensor]:
-        
-    #     # input: HW+2, BT, D
-    #     q = (x @ self.attn.in_proj_weight[:self.d_model].T
-    #          ) + self.attn.in_proj_bias[:self.d_model]
-
-    #     k = (y @ self.attn.in_proj_weight[self.d_model:-self.d_model].T
-    #          ) + self.attn.in_proj_bias[self.d_model:-self.d_model]
-    #     v = (y @ self.attn.in_proj_weight[-self.d_model:].T
-    #          ) + self.attn.in_proj_bias[-self.d_model:]
-    #     Tx, Ty, N = q.size(0), k.size(0), q.size(1)
-    #     q = q.view(Tx, N, self.attn.num_heads,
-    #                self.attn.head_dim).permute(1, 2, 0, 3) # N num_heads Tx D_head
-    #     k = k.view(Ty, N, self.attn.num_heads,
-    #                self.attn.head_dim).permute(1, 2, 0, 3) # N num_heads Ty D_head
-    #     v = v.view(Ty, N, self.attn.num_heads,
-    #                self.attn.head_dim).permute(1, 2, 0, 3)
-        
-    #     aff = (q @ k.transpose(-2, -1) / (self.attn.head_dim**0.5)) # (N, num_heads, Tx, Ty)
-        
-    #     aff = aff.softmax(dim=-1)
-        
-        
-    #     out = aff @ v  # N num_heads Tx D_head
-    #     out = out.permute(2, 0, 1, 3).flatten(2)
-    #     out = self.attn.out_proj(out) # N Tx D
-        
-    #     return out 
     
     def forward(self, x: torch.Tensor, ):
-        ## x shape [ BT, HW+1, D]
-        bt, n, d = x.shape
-        ## temporal adaptation
-        class_token=x[:, :1, :] # 1, BT, D
-        
-        xt = rearrange(class_token, '(b t) n d -> (b n) t d', t=self.num_frames)
-        ln_xt=self.ln_1(xt)
-        
-        # if self.use_flash_attn:
-        if self.shift:
-            xt = self.T_Adapter(self.attn(x=ln_xt,x_kv=ln_xt))
+        if not self.wind_attn:
+            ## x shape [ BT, HW+1, D]
+            bt, n, d = x.shape
+            ## temporal adaptation
+            xt = rearrange(x, '(b t) n d -> (b n) t d', t=self.num_frames)
+            if self.num_tadapter == 2:
+                xt = self.T_Adapter(self.attn(self.T_Adapter_in(self.ln_1(xt))))
+            else:
+                xt = self.T_Adapter(self.attn(self.ln_1(xt)))
+            xt = rearrange(xt, '(b n) t d -> (b t) n d', n=n)
         else:
-            xt = self.T_Adapter(self.attn(ln_xt))
-        
-        xt = rearrange(xt, '(b n) t d -> (b t) n d', n=1)
-        # x = x + self.drop_path(xt)
-        x= torch.cat([x[:, :1, :], xt, x[:, 1:, :]], dim=1)# x shape [HW+2, BT, D]
-        
-        if self.shift:
-            xln=self.ln_1(x)
-            tmp_x = xln[ :, 2:, :].clone()
+            # window local attention
+            cls_token,windows=x[:,:1,:],x[:,1:,:]
             
-            NT, L,  C = tmp_x.shape
+            BT, L, C = windows.shape
             T = self.num_frames
-            N = NT // self.num_frames
-            H = W = int(L**0.5)
+            B = BT // self.num_frames
+            H = W = int(L ** 0.5)
+
+            window_size, shift_size = get_window_size((T, H, W), self.window_size, self.shift_size)
+
+            windows = rearrange(windows, '(b t) (h w) c -> b t h w c', t=self.num_frames, h=H, w=W)
+
+            _, Dp, Hp, Wp, _ = windows.shape
             
-            tmp_x = rearrange(tmp_x, '(b t) (h w) c -> b t h w c', b=N, t = T, h=H, w=W, c=C)
-            tmp_x = self.shift_op(tmp_x)
-            tmp_x = rearrange(tmp_x, 'b t h w c -> (b t) c h w')
+            if any(i > 0 for i in shift_size):
+                shifted_win = torch.roll(windows, shifts=(-shift_size[0], -shift_size[1], -shift_size[2]), dims=(1, 2, 3))
+                
+            else:
+                shifted_win = windows
             
-            tmp_x = tmp_x.view(NT, C, -1).permute(0, 2, 1).contiguous() #  NT P C
-            tmp_x = torch.cat([xln, tmp_x], dim=1)
+            shifted_win = window_partition(shifted_win, window_size)  # B*nW, Wd*Wh*Ww, C
             
-            # if self.use_flash_attn:
-            x = x + self.S_Adapter(self.attn(x=xln,x_kv=tmp_x)) 
-            # else:
-            #     x = x + self.S_Adapter(self.cross_attention(xln,tmp_x)) 
+            shifted_win=self.attn(self.ln_1(shifted_win))
             
-        else:
-            # if self.use_flash_attn:
-            x = x + self.drop_path(self.S_Adapter(self.attn(self.ln_1(x))))
-            # else:
-            #     x = x + self.drop_path(self.S_Adapter(self.attention(self.ln_1(x))))
+            shifted_win = shifted_win.view(-1, *(window_size+(C,)))
+            
+            shifted_win = window_reverse(shifted_win, window_size, B, Dp, Hp, Wp) # (B, D, H, W, C)
+            
+            # reverse cyclic shift
+            if any(i > 0 for i in shift_size):
+                windows_attn = torch.roll(shifted_win, shifts=(shift_size[0], shift_size[1], shift_size[2]), dims=(1, 2, 3))
+            else:
+                windows_attn = shifted_win
+            
+            windows_attn = rearrange(windows_attn, 'b t h w c -> (b t) (h w) c')
+            
+            cls_token = rearrange(cls_token, '(b t) n d -> (b n) t d', t=self.num_frames)
+            cls_attn = self.attn(self.ln_1(cls_token))
+            cls_attn = rearrange(cls_attn, '(b n) t d -> (b t) n d', n=1)
+            xt = torch.cat([cls_attn,windows_attn],dim=1)
+            xt = self.T_Adapter(xt)
+        
+        x = x + self.drop_path(xt)
+        
+        
+        # temporal class token prompt adaptation
+        # t_cls=xt[:,:1,:]
+        if self.prompt:
+            if self.wind_attn:
+                tcls_prompt=cls_attn
+            else:
+                tcls_prompt=xt[:,:1,:]
+            x = torch.cat([x[:, :1, :], tcls_prompt, x[:, 1:, :]], dim=1) # BT HW+1+prompt D
+        
+        ## spatial adaptation
+        # x = x + self.S_Adapter(self.attn(self.ln_1(x)))
+        
+        x = x + self.attn(self.ln_1(x)) + self.drop_path(self.scale * self.S_Adapter(x))
+        
+        if self.prompt:
+            x = torch.cat([x[:, :1, :], x[:, 2:, :]], dim=1)
+        
+        # x = x + self.drop_path(xt)
         
         ## joint adaptation
-        x= torch.cat([x[:, :1, :], x[:, 2:, :]], dim=1) # [HW+2, BT, D]
         xn = self.ln_2(x)
         x = x + self.mlp(xn) + self.drop_path(self.scale * self.MLP_Adapter(xn))
         return x
@@ -390,10 +415,13 @@ class TemporalShift(nn.Module):
 
 class Transformer(nn.Module):
     def __init__(self, num_frames, width: int, layers: int, heads: int, attn_mask: torch.Tensor = None, 
-                scale=1., drop_path=0.1, shift = False, shift_type: str = 'psm', use_flash_attn: bool = False):
+                scale=1., drop_path=0.1, use_flash_attn: bool = False,
+                prompt=True,wind_attn=False,window_size= (32,2,2),not_shift=True,):
         super().__init__()
         self.width = width
         self.layers = layers
+        self.window_size = window_size
+        self.shift_size = (0, 0, window_size[2]//2)
         
         dpr = [x.item() for x in torch.linspace(0, drop_path, self.layers)]
         
@@ -406,9 +434,11 @@ class Transformer(nn.Module):
                     scale,
                     num_frames,
                     dpr[i],
-                    shift= shift,
-                    shift_type=shift_type,
-                    use_flash_attn=use_flash_attn
+                    use_flash_attn,
+                    prompt,
+                    wind_attn,
+                    window_size = self.window_size,
+                    shift_size=(0,0,0) if (i % 2 == 0) or not_shift else self.shift_size,
                 )
                 for i in range(layers)
             ]
@@ -423,9 +453,9 @@ class ViT_CLIP_FLASH(nn.Module):
     def __init__(self, input_resolution: int, num_frames: int, patch_size: int, width: int, layers: int, heads: int, drop_path_rate, 
                 adapter_scale=0.5, 
                 pretrained=None, 
-                shift = False,
-                shift_type='psm',
-                use_flash_attn: bool = False ):
+                use_flash_attn: bool = False,
+                prompt=True,wind_attn=False,window_size= (32,2,2),not_shift=True,
+                ):
         super().__init__()
         self.input_resolution = input_resolution
         self.pretrained = pretrained
@@ -434,7 +464,7 @@ class ViT_CLIP_FLASH(nn.Module):
         scale = width ** -0.5
         self.layers = layers
         
-        self.shift=shift
+        
         self.width=width
         
         self.class_embedding = nn.Parameter(scale * torch.randn(width))
@@ -444,11 +474,10 @@ class ViT_CLIP_FLASH(nn.Module):
         self.num_frames = num_frames
         self.temporal_embedding = nn.Parameter(torch.zeros(1, num_frames, width))
 
-        
-        
         self.transformer = Transformer(num_frames, width, layers, heads, scale=adapter_scale, drop_path=drop_path_rate,
-                                        shift=shift ,shift_type=shift_type,
-                                        use_flash_attn=use_flash_attn)
+                                        use_flash_attn=use_flash_attn,
+                                        prompt=prompt,wind_attn=wind_attn, window_size= window_size,not_shift=not_shift
+                                        )
 
         self.ln_post = LayerNorm(width)
         
@@ -492,21 +521,23 @@ class ViT_CLIP_FLASH(nn.Module):
             # pretrain_dict = remapped_state_dict['visual']
             # del remapped_state_dict
             
-            # 'attn.in_proj_weight': 'attn.Wqkv.weight', 'attn.in_proj_bias': 'attn.Wqkv.bias',
-            #     'attn.out_proj.weight': 'attn.out_proj.weight', 'attn.out_proj.bias': 'attn.out_proj.bias',
-            #     'mlp.c_fc.weight': 'mlp.fc1.weight', 'mlp.c_fc.bias': 'mlp.fc1.bias',
-            #     'mlp.c_proj.weight': 'mlp.fc2.weight', 'mlp.c_proj.bias': 'mlp.fc2.bias',
             
-            if not self.shift:
-                swaps = [('attn.in_proj_weight', 'attn.Wqkv.weight'), ('attn.in_proj_bias', 'attn.Wqkv.bias'),
+            # if not self.shift:
+            #     swaps = [('attn.in_proj_weight', 'attn.Wqkv.weight'), ('attn.in_proj_bias', 'attn.Wqkv.bias'),
+            #         ('attn.out_proj.weight','attn.out_proj.weight'),('attn.out_proj.bias','attn.out_proj.bias'),
+            #         ('mlp.c_fc.weight','mlp.fc1.weight'),('mlp.c_fc.bias','mlp.fc1.bias'),
+            #         ('mlp.c_proj.weight','mlp.fc2.weight'),('mlp.c_proj.bias','mlp.fc2.bias')]
+            # else:
+            #     swaps = [('attn.in_proj_weight', 'attn.Wq.weight','attn.Wkv.weight'), ('attn.in_proj_bias', 'attn.Wq.bias','attn.Wkv.bias'),
+            #         ('attn.out_proj.weight','attn.out_proj.weight'),('attn.out_proj.bias','attn.out_proj.bias'),
+            #         ('mlp.c_fc.weight','mlp.fc1.weight'),('mlp.c_fc.bias','mlp.fc1.bias'),
+            #         ('mlp.c_proj.weight','mlp.fc2.weight'),('mlp.c_proj.bias','mlp.fc2.bias')]
+            
+            swaps = [('attn.in_proj_weight', 'attn.Wqkv.weight'), ('attn.in_proj_bias', 'attn.Wqkv.bias'),
                     ('attn.out_proj.weight','attn.out_proj.weight'),('attn.out_proj.bias','attn.out_proj.bias'),
                     ('mlp.c_fc.weight','mlp.fc1.weight'),('mlp.c_fc.bias','mlp.fc1.bias'),
-                    ('mlp.c_proj.weight','mlp.fc2.weight'),('mlp.c_proj.bias','mlp.fc2.bias')]
-            else:
-                swaps = [('attn.in_proj_weight', 'attn.Wq.weight','attn.Wkv.weight'), ('attn.in_proj_bias', 'attn.Wq.bias','attn.Wkv.bias'),
-                    ('attn.out_proj.weight','attn.out_proj.weight'),('attn.out_proj.bias','attn.out_proj.bias'),
-                    ('mlp.c_fc.weight','mlp.fc1.weight'),('mlp.c_fc.bias','mlp.fc1.bias'),
-                    ('mlp.c_proj.weight','mlp.fc2.weight'),('mlp.c_proj.bias','mlp.fc2.bias')]
+                    ('mlp.c_proj.weight','mlp.fc2.weight'),('mlp.c_proj.bias','mlp.fc2.bias')
+                    ]
             
             out_dict={}
             for k, v in pretrain_dict.items():

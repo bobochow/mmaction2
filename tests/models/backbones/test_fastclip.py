@@ -31,12 +31,12 @@ def test_fast_clip():
                         input_resolution=224,
                         adapter_scale=0.5,
                         patch_size=16,
-                        num_frames=4,
+                        num_frames=8,
                         width=768,
                         layers=12,
                         heads=12,
                         drop_path_rate=0.1,
-                        shift = False,
+                        shift = True,
                         use_flash_attn=True,
                         ).to(device=device, dtype=dtype)
     model.init_weights()
@@ -46,12 +46,12 @@ def test_fast_clip():
                         input_resolution=224,
                         adapter_scale=0.5,
                         patch_size=16,
-                        num_frames=4,
+                        num_frames=8,
                         width=768,
                         layers=12,
                         heads=12,
                         drop_path_rate=0.1,
-                        shift = False,
+                        shift = True,
                         ).to(device=device)
     model_ref.init_weights()
     
@@ -61,19 +61,19 @@ def test_fast_clip():
                         input_resolution=224,
                         adapter_scale=0.5,
                         patch_size=16,
-                        num_frames=4,
+                        num_frames=8,
                         width=768,
                         layers=12,
                         heads=12,
                         drop_path_rate=0.1,
-                        shift = False,
+                        shift = True,
                         ).to(device=device, dtype=dtype)
     model_fp16.init_weights()
     model_fp16.eval()
 
     torch.manual_seed(0)
     
-    x = torch.randn(2, 3 , 4, 224, 224, device=device, dtype=dtype)
+    x = torch.randn(2, 3 , 8, 224, 224, device=device, dtype=dtype)
     
     # input_shape = (2, 3, 4, 224, 224)
     # x = generate_backbone_demo_inputs(input_shape)
@@ -81,10 +81,13 @@ def test_fast_clip():
     with autocast(enabled=True,device_type='cuda',dtype=torch.float16):
         print('start flash-attn!!!!!!!!!!!')
         out = model(x)
+        print(out)
         print('start fp16 !!!!!!!!!!!')
         out_timm = model_fp16(x)
+        print(out_timm)
     print('start fp32 !!!!!!!!!!!')
     out_ref = model_ref(x.float())
+    print(out_ref)
 
     print(f"Output max diff: {(out - out_ref).abs().max().item()}")
     print(f"Output mean diff: {(out - out_ref).abs().mean().item()}")

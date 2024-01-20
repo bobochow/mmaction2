@@ -1,4 +1,7 @@
-export CUDA_VISIBLE_DEVICES=2
+export CUDA_VISIBLE_DEVICES=2,3
+
+export PYTHONPATH=$PYTHONPATH:/home/zb/mmaction2
+export PYTHONPATH=$PYTHONPATH:/home/zb/mmaction2/third_party/decord-dev/python
 
 # python tools/train.py configs/recognition/aim/vitclip_base_hmdb51.py
 
@@ -34,10 +37,14 @@ export CUDA_VISIBLE_DEVICES=2
 #     echo "第一个脚本运行失败"
 # fi
 
-# PORT=29666 bash tools/dist_train.sh configs/recognition/aim/vitclip_flash_base_hmdb51.py 1 
+PORT=29666 bash tools/dist_train.sh configs/recognition/aim/vitclip_flash_base_hmdb51.py 2 
 
-python tools/train.py configs/recognition/aim/vitclip_flash_base_hmdb51.py
+# python tools/train.py configs/recognition/aim/vitclip_flash_base_hmdb51.py
 
 # python tools/train.py configs/recognition/aim/vitclip_flash_base_diving48.py
+
+# python tools/train.py configs/recognition/aim/vitclip_flash_base_sthv2.py
+
+# python tools/test.py configs/recognition/aim/vitclip_flash_base_diving48.py work_dirs/diving48/vitclip_diving48_amp/baseline_flash_check_aug_fusedecord/best_acc_top1_epoch_28.pth
 
 # python tools/train.py configs/recognition/aim/vitclip_fusedecord_base_hmdb51.py

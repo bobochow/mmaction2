@@ -284,9 +284,9 @@ class ResidualAttentionBlock(nn.Module):
             # if self.shift_type=='fsm':
             #     tmp_x = torch.cat([xln[:2,:,:], tmp_x], dim=0)
             
-            # x = x + self.S_Adapter(self.attention(tmp_x,xln)[:L+2,:,:])
+            x = x + self.S_Adapter(self.attention(tmp_x)[:L+2,:,:])
             
-            x = x + self.S_Adapter(self.shift_attention(xln,tmp_x))
+            # x = x + self.S_Adapter(self.shift_attention(xln,tmp_x))
             
             # joint adaptation
             x= torch.cat([x[:1,:,:], x[2:,:,:]], dim=0) # [HW+2, BT, D]
